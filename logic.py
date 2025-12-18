@@ -406,19 +406,40 @@ def _build_daily_map(
                 if display_date.year != year or display_date.month != month:
                     continue
 
-            day_key = display_date.strftime("%d/%m/%Y")
-            entry = daily_map.setdefault(day_key, {"segments": [], "date": display_date})
+                day_key = display_date.strftime("%d/%m/%Y")
+                entry = daily_map.setdefault(day_key, {"segments": [], "date": display_date})
 
-            is_second_day = (p_date > r_date)
+                is_second_day = (p_date > r_date)
 
-            # Sort segments chronologically by start time before normalizing
-            seg_list_sorted = sorted(seg_list, key=lambda s: span_minutes(s["start_time"], s["end_time"])[0])
-            
-            last_s_end_norm = -1
-            for seg in seg_list_sorted:
+                # Sort segments chronologically by start time before normalizing
+                seg_list_sorted = sorted(seg_list, key=lambda s: span_minutes(s["start_time"], s["end_time"])[0])
+
+                # Rotate the list so that the segment corresponding to the report start time comes first
+                # This ensures that normalization flows correctly (e.g. 06:30-08:00 is end of shift, not start)
+                rotate_idx = 0
+                rep_start_min = r_start % MINUTES_PER_DAY
+
+                # Find the segment that starts closest to (and before/at) the report start time
+                best_start_diff = -1
+                for i, seg in enumerate(seg_list_sorted):
+                    seg_start_min, _ = span_minutes(seg["start_time"], seg["end_time"])
+                    if seg_start_min <= rep_start_min:
+                        if seg_start_min > best_start_diff:
+                            best_start_diff = seg_start_min
+                            rotate_idx = i
+
+                # If no segment starts before report (e.g. report 05:00, first seg 06:00),
+                # then it belongs to the LAST segment (from yesterday)
+                if best_start_diff == -1 and seg_list_sorted:
+                    rotate_idx = len(seg_list_sorted) - 1
+
+                seg_list_ordered = seg_list_sorted[rotate_idx:] + seg_list_sorted[:rotate_idx]
+
+                last_s_end_norm = -1
+                for seg in seg_list_ordered:
                     # שימוש במשתנים ייחודיים למניעת דריסת משתני הלופ החיצוני
                     orig_s_start, orig_s_end = span_minutes(seg["start_time"], seg["end_time"])
-                    
+
                     while orig_s_start < last_s_end_norm:
                         orig_s_start += MINUTES_PER_DAY
                         orig_s_end += MINUTES_PER_DAY
@@ -438,7 +459,7 @@ def _build_daily_map(
                     # נרמול גבולות המקטע לפי workday
                     eff_start_in_part = max(current_seg_start, s_start)
                     eff_end_in_part = min(current_seg_end, s_end)
-                    
+
                     if s_end <= CUTOFF:
                         eff_start = eff_start_in_part + MINUTES_PER_DAY
                         eff_end = eff_end_in_part + MINUTES_PER_DAY
