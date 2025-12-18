@@ -97,93 +97,160 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
         is_vacation_report = ("חופשה" in shift_name_str)
         
         for p_date, p_start, p_end in parts:
-            if p_date.year != year or p_date.month != month:
-                continue
+            # Split segments crossing 08:00 cutoff
+            CUTOFF = 480  # 08:00
+            sub_parts = []
+            if p_start < CUTOFF < p_end:
+                sub_parts.append((p_start, CUTOFF))
+                sub_parts.append((CUTOFF, p_end))
+            else:
+                sub_parts.append((p_start, p_end))
 
-            # For display purposes: shifts ending by 08:00 (480 min) belong to previous day
-            # This only affects report grouping, not calculations
-            MORNING_CUTOFF = 480  # 08:00
-            display_date = p_date
-            if p_end <= MORNING_CUTOFF and p_start < MORNING_CUTOFF:
-                # This segment ends by 08:00 - display under previous day
-                display_date = p_date - timedelta(days=1)
-
-            day_key = display_date.strftime("%d/%m/%Y")
-            entry = daily_map.setdefault(day_key, {"buckets": {}, "shifts": set(), "segments": []})
-            if r["shift_name"]:
-                entry["shifts"].add(r["shift_name"])
-                
-            minutes_covered = 0
-            is_second_day = (p_date > r_date)
-            
-            for seg in seg_list:
-                seg_start, seg_end = span_minutes(seg["start_time"], seg["end_time"])
-                
-                shift_crosses = (rep_end_orig > MINUTES_PER_DAY)
-                if shift_crosses and seg_start < rep_start_orig:
-                    seg_start += MINUTES_PER_DAY
-                    seg_end += MINUTES_PER_DAY
-                    
-                if is_second_day:
-                    current_seg_start = seg_start - MINUTES_PER_DAY
-                    current_seg_end = seg_end - MINUTES_PER_DAY
+            for s_start, s_end in sub_parts:
+                # Assign to workday and normalize times
+                if s_end <= CUTOFF:
+                    # Belongs to previous day's workday
+                    display_date = p_date - timedelta(days=1)
+                    norm_start = s_start + MINUTES_PER_DAY
+                    norm_end = s_end + MINUTES_PER_DAY
                 else:
-                    current_seg_start = seg_start
-                    current_seg_end = seg_end
-                    
-                overlap = overlap_minutes(p_start, p_end, current_seg_start, current_seg_end)
-                if overlap <= 0:
+                    # Belongs to current day's workday
+                    display_date = p_date
+                    norm_start = s_start
+                    norm_end = s_end
+
+                if display_date.year != year or display_date.month != month:
                     continue
+
+                day_key = display_date.strftime("%d/%m/%Y")
+                entry = daily_map.setdefault(day_key, {"buckets": {}, "shifts": set(), "segments": []})
+                if r["shift_name"]:
+                    entry["shifts"].add(r["shift_name"])
                     
-                minutes_covered += overlap
+                minutes_covered = 0
+                is_second_day = (p_date > r_date)
                 
-                # Determine effective type
-                if is_sick_report:
-                     effective_seg_type = "sick"
-                elif is_vacation_report:
-                     effective_seg_type = "vacation"
-                else:
-                     effective_seg_type = seg["segment_type"]
+                # Sort segments chronologically by start time
+                seg_list_sorted = sorted(seg_list, key=lambda s: span_minutes(s["start_time"], s["end_time"])[0])
+                
+                # Rotate the list so that the segment corresponding to the report start time comes first
+                # This ensures that normalization flows correctly (e.g. 06:30-08:00 is end of shift, not start)
+                rotate_idx = 0
+                rep_start_min = rep_start_orig % MINUTES_PER_DAY
+                
+                # Find the segment that starts closest to (and before/at) the report start time
+                best_start_diff = -1
+                
+                for i, seg in enumerate(seg_list_sorted):
+                    seg_start_min, _ = span_minutes(seg["start_time"], seg["end_time"])
+                    if seg_start_min <= rep_start_min:
+                        if seg_start_min > best_start_diff:
+                            best_start_diff = seg_start_min
+                            rotate_idx = i
+                    elif best_start_diff == -1:
+                        # If we haven't found any starting before, and this is the first one, 
+                        # checking implies we might need to wrap around.
+                        # But we continue to see if there are others.
+                        pass
+                
+                # If no segment starts before report (e.g. report 05:00, first seg 06:00), 
+                # then it belongs to the LAST segment (from yesterday)
+                if best_start_diff == -1 and seg_list_sorted:
+                    rotate_idx = len(seg_list_sorted) - 1
+                
+                seg_list_ordered = seg_list_sorted[rotate_idx:] + seg_list_sorted[:rotate_idx]
+                
+                # Normalize segments from shift definition to be continuous
+                last_s_end_norm = -1
+                for seg in seg_list_ordered:
+                    # Use unique variable names to avoid shadowing
+                    orig_s_start, orig_s_end = span_minutes(seg["start_time"], seg["end_time"])
+                    
+                    # Make segments continuous relative to the first one
+                    if last_s_end_norm == -1:
+                        # First segment: align to report start day roughly
+                        # If orig_s_start is far from rep_start_min, adjust? 
+                        # Actually, just start with it as is (or +1440 if needed?)
+                        # No, simple normalization should work if we start with the "right" segment.
+                        pass
+                    else:
+                        while orig_s_start < last_s_end_norm:
+                            orig_s_start += MINUTES_PER_DAY
+                            orig_s_end += MINUTES_PER_DAY
+                    
+                    last_s_end_norm = orig_s_end
+                    
+                    # Adjust segments to the timeline of the current report part
+                    if is_second_day:
+                        current_seg_start = orig_s_start - MINUTES_PER_DAY
+                        current_seg_end = orig_s_end - MINUTES_PER_DAY
+                    else:
+                        current_seg_start = orig_s_start
+                        current_seg_end = orig_s_end
+                        
+                    # Calculate overlap between report part (s_start, s_end) and segment
+                    overlap = overlap_minutes(s_start, s_end, current_seg_start, current_seg_end)
+                    if overlap <= 0:
+                        continue
+                        
+                    minutes_covered += overlap
+                    
+                    # Determine effective type
+                    if is_sick_report:
+                         effective_seg_type = "sick"
+                    elif is_vacation_report:
+                         effective_seg_type = "vacation"
+                    else:
+                         effective_seg_type = seg["segment_type"]
 
-                if effective_seg_type == "standby":
-                    label = "כוננות"
-                elif effective_seg_type == "vacation":
-                    label = "חופשה"
-                elif effective_seg_type == "sick":
-                    label = "מחלה"
-                elif seg["wage_percent"] == 100:
-                    label = "100%"
-                elif seg["wage_percent"] == 125:
-                    label = "125%"
-                elif seg["wage_percent"] == 150:
-                    label = "150%"
-                elif seg["wage_percent"] == 175:
-                    label = "175%"
-                elif seg["wage_percent"] == 200:
-                    label = "200%"
-                else:
-                    label = f"{seg['wage_percent']}%"
-                
-                entry["buckets"].setdefault(label, 0)
-                entry["buckets"][label] += overlap
-                
-                eff_start = max(current_seg_start, p_start)
-                eff_end = min(current_seg_end, p_end)
-                
-                segment_id = seg.get("id")
-                apartment_type_id = r.get("apartment_type_id")
-                is_married = r.get("is_married")
-                apartment_name = r.get("apartment_name", "")
+                    if effective_seg_type == "standby":
+                        label = "כוננות"
+                    elif effective_seg_type == "vacation":
+                        label = "חופשה"
+                    elif effective_seg_type == "sick":
+                        label = "מחלה"
+                    elif seg["wage_percent"] == 100:
+                        label = "100%"
+                    elif seg["wage_percent"] == 125:
+                        label = "125%"
+                    elif seg["wage_percent"] == 150:
+                        label = "150%"
+                    elif seg["wage_percent"] == 175:
+                        label = "175%"
+                    elif seg["wage_percent"] == 200:
+                        label = "200%"
+                    else:
+                        label = f"{seg['wage_percent']}%"
+                    
+                    entry["buckets"].setdefault(label, 0)
+                    entry["buckets"][label] += overlap
+                    
+                    # Calculate effective normalized start/end for the segment
+                    eff_start_in_part = max(current_seg_start, s_start)
+                    eff_end_in_part = min(current_seg_end, s_end)
+                    
+                    # Apply same normalization to segment boundaries
+                    if s_end <= CUTOFF:
+                        eff_start = eff_start_in_part + MINUTES_PER_DAY
+                        eff_end = eff_end_in_part + MINUTES_PER_DAY
+                    else:
+                        eff_start = eff_start_in_part
+                        eff_end = eff_end_in_part
+                    
+                    segment_id = seg.get("id")
+                    apartment_type_id = r.get("apartment_type_id")
+                    is_married = r.get("is_married")
+                    apartment_name = r.get("apartment_name", "")
 
-                # Store actual_date (p_date) for correct Shabbat calculation even when displayed under different day
-                entry["segments"].append((eff_start, eff_end, effective_seg_type, label, r["shift_type_id"], segment_id, apartment_type_id, is_married, apartment_name, p_date))
-                
-            # Uncovered minutes -> work
-            total_part_minutes = p_end - p_start
-            remaining = total_part_minutes - minutes_covered
-            if remaining > 0:
-                entry["buckets"].setdefault("שעות עבודה", 0)
-                entry["buckets"]["שעות עבודה"] += remaining
+                    # Store actual_date (p_date) for correct Shabbat calculation even when displayed under different day
+                    entry["segments"].append((eff_start, eff_end, effective_seg_type, label, r["shift_type_id"], segment_id, apartment_type_id, is_married, apartment_name, p_date))
+                    
+                # Uncovered minutes -> work
+                total_part_minutes = s_end - s_start
+                remaining = total_part_minutes - minutes_covered
+                if remaining > 0:
+                    entry["buckets"].setdefault("שעות עבודה", 0)
+                    entry["buckets"]["שעות עבודה"] += remaining
 
     # Process Daily Segments
     daily_segments = []
@@ -269,7 +336,9 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
             ratio = total_overlap / duration
             if ratio >= STANDBY_CANCEL_OVERLAP_THRESHOLD:
                 cancelled_standbys.append({
-                    "start": sb_start, "end": sb_end, "reason": f"חפיפה ({int(ratio*100)}%)"
+                    "start": sb_start % MINUTES_PER_DAY, 
+                    "end": sb_end % MINUTES_PER_DAY, 
+                    "reason": f"חפיפה ({int(ratio*100)}%)"
                 })
             else:
                 valid_standby.append(sb)
@@ -306,6 +375,7 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
         
         current_chain_segments = []
         last_end = None
+        last_etype = None
         
         # Accumulators
         d_calc100 = 0; d_calc125 = 0; d_calc150 = 0; d_calc175 = 0; d_calc200 = 0
@@ -348,8 +418,6 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                     chain_apartments.add(apt)
             apt_name = ", ".join(sorted(chain_apartments)) if chain_apartments else ""
 
-            chain_start = segments[0][0]
-
             # Create a separate chain row for each rate segment (like the old code)
             for i, (seg_start, seg_end, seg_label, is_shabbat) in enumerate(seg_detail):
                 is_first = (i == 0)
@@ -372,8 +440,8 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
 
                 seg_pay = (seg_c100/60*1.0 + seg_c125/60*1.25 + seg_c150/60*1.5 + seg_c175/60*1.75 + seg_c200/60*2.0) * minimum_wage
 
-                start_str = f"{seg_start // 60:02d}:{seg_start % 60:02d}"
-                end_str = f"{seg_end // 60:02d}:{seg_end % 60:02d}"
+                start_str = f"{seg_start // 60 % 24:02d}:{seg_start % 60:02d}"
+                end_str = f"{seg_end // 60 % 24:02d}:{seg_end % 60:02d}"
 
                 chains.append({
                     "start_time": start_str,
@@ -389,7 +457,7 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                     "apartment_name": apt_name,
                     "segments": [(start_str, end_str, seg_label)],
                     "break_reason": break_reason if is_last else "",
-                    "from_prev_day": (seg_start == 0) if is_first else False,
+                    "from_prev_day": (seg_start >= MINUTES_PER_DAY) if is_first else False,
                 })
 
             return pay, c100, c125, c150, c175, c200
@@ -417,14 +485,15 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
             if is_special:
                 # Handle special payment and add to chains
                 if etype == "standby":
-                    is_cont = (start == 0)
+                    # Only pay if it's not a continuation of a standby that already started
+                    is_cont = (last_etype == "standby" and last_end == start)
                     if not is_cont:
                         rate = get_standby_rate(conn, event.get("seg_id") or 0, event.get("apt"), bool(event.get("married")))
                         d_standby_pay += rate
 
                     chains.append({
-                        "start_time": f"{start // 60:02d}:{start % 60:02d}",
-                        "end_time": f"{end // 60:02d}:{end % 60:02d}",
+                        "start_time": f"{start // 60 % 24:02d}:{start % 60:02d}",
+                        "end_time": f"{end // 60 % 24:02d}:{end % 60:02d}",
                         "total_minutes": end - start,
                         "payment": 0,
                         "calc100": 0, "calc125": 0, "calc150": 0, "calc175": 0, "calc200": 0,
@@ -432,7 +501,7 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                         "apartment_name": event.get("apartment_name", ""),
                         "segments": [],
                         "break_reason": "",
-                        "from_prev_day": start == 0,
+                        "from_prev_day": start >= MINUTES_PER_DAY,
                     })
 
                 elif etype == "vacation" or etype == "sick":
@@ -440,8 +509,8 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                     d_payment += hrs * minimum_wage
 
                     chains.append({
-                        "start_time": f"{start // 60:02d}:{start % 60:02d}",
-                        "end_time": f"{end // 60:02d}:{end % 60:02d}",
+                        "start_time": f"{start // 60 % 24:02d}:{start % 60:02d}",
+                        "end_time": f"{end // 60 % 24:02d}:{end % 60:02d}",
                         "total_minutes": end - start,
                         "payment": hrs * minimum_wage,
                         "calc100": 0, "calc125": 0, "calc150": 0, "calc175": 0, "calc200": 0,
@@ -449,13 +518,15 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                         "apartment_name": "",
                         "segments": [],
                         "break_reason": "",
-                        "from_prev_day": False,
+                        "from_prev_day": start >= MINUTES_PER_DAY,
                     })
 
                 last_end = end
+                last_etype = etype
             else:
                 current_chain_segments.append((start, end, event["label"], event["shift_id"], event.get("apartment_name", ""), event.get("actual_date")))
                 last_end = end
+                last_etype = etype
 
         # Close last chain
         if current_chain_segments:

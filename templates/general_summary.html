@@ -21,7 +21,12 @@
 </style>
 <div class="card" style="max-width: none; width: 100%;">
     <div class="header-line">
-        <h2 class="section-title">סיכום שכר כללי - כל המדריכים</h2>
+        <h2 class="section-title">
+            סיכום שכר כללי - כל המדריכים
+            <span style="font-size: 0.7em; color: #666; font-weight: normal; margin-right: 10px;">
+                ({{ summary_data|length }} מדריכים)
+            </span>
+        </h2>
         <div class="controls">
             <form method="get" style="display: flex; gap: 10px; align-items: center;">
                 <select name="month" onchange="this.form.submit()">

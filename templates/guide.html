@@ -1,5 +1,275 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+  /* Print styles for compact A4 layout */
+  @media print {
+    @page {
+      size: A4;
+      margin: 0.5cm;
+    }
+    
+    /* Hide navigation and controls */
+    .no-print,
+    .tabs input[type="radio"],
+    .tabs label,
+    .controls,
+    .header-line .muted,
+    button,
+    form,
+    #toggleStandbyBtn {
+      display: none !important;
+    }
+    
+    /* Show only the chains panel */
+    .panel {
+      display: none;
+    }
+    .panel-chains {
+      display: block !important;
+    }
+    
+    /* Compact layout */
+    body {
+      font-size: 9pt;
+      line-height: 1.2;
+      margin: 0;
+      padding: 0;
+    }
+    
+    .card {
+      margin: 0;
+      padding: 0;
+      box-shadow: none;
+      border: none;
+    }
+    
+    /* Print header */
+    .print-header {
+      display: block !important;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #000;
+    }
+    
+    /* Compact header */
+    .header-line {
+      display: none;
+    }
+    
+    .section-title {
+      font-size: 14pt;
+      margin: 0;
+    }
+    
+    /* Compact day headers */
+    .day-header {
+      font-size: 7pt !important;
+      margin: 2px 0 1px 0 !important;
+      padding: 0 !important;
+      page-break-after: avoid;
+    }
+    
+    /* Hide h2 title in print (only show print header) */
+    .panel-chains h2 {
+      display: none;
+    }
+    
+    /* Compact tables */
+    table {
+      width: 100%;
+      font-size: 6.5pt;
+      border-collapse: collapse;
+      margin-bottom: 3px;
+      page-break-inside: avoid;
+    }
+    
+    table th {
+      padding: 1px 2px;
+      font-size: 6.5pt;
+      font-weight: bold;
+      background: #e0e0e0 !important;
+      border: 0.5px solid #000;
+      text-align: center;
+      line-height: 1.1;
+    }
+    
+    table td {
+      padding: 1px 2px;
+      font-size: 6.5pt;
+      border: 0.5px solid #ccc;
+      text-align: center;
+      line-height: 1.1;
+    }
+    
+    /* Make table fit better */
+    table th:nth-child(1),
+    table td:nth-child(1) {
+      width: 8%;
+    }
+    table th:nth-child(2),
+    table td:nth-child(2) {
+      width: 8%;
+    }
+    table th:nth-child(3),
+    table td:nth-child(3) {
+      width: 10%;
+    }
+    table th:nth-child(4),
+    table td:nth-child(4) {
+      width: 8%;
+    }
+    table th:nth-child(5),
+    table td:nth-child(5) {
+      width: 7%;
+    }
+    table th:nth-child(6),
+    table td:nth-child(6) {
+      width: 8%;
+    }
+    table th:nth-child(7),
+    table td:nth-child(7) {
+      width: 15%;
+    }
+    table th:nth-child(8),
+    table td:nth-child(8),
+    table th:nth-child(9),
+    table td:nth-child(9),
+    table th:nth-child(10),
+    table td:nth-child(10),
+    table th:nth-child(11),
+    table td:nth-child(11),
+    table th:nth-child(12),
+    table td:nth-child(12) {
+      width: 6%;
+    }
+    table th:nth-child(13),
+    table td:nth-child(13) {
+      width: 7%;
+    }
+    
+    /* Summary row in table */
+    .panel-chains table tbody tr:last-child {
+      background-color: #e0e0e0 !important;
+      font-weight: bold;
+      border-top: 1px solid #000 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    
+    .panel-chains table tbody tr:last-child td {
+      padding: 2px 3px;
+      font-size: 6.5pt;
+      font-weight: bold;
+      border: 0.5px solid #000;
+    }
+    
+    /* Compact cancelled standbys */
+    .panel-chains > div > div[style*="background: #fef2f2"] {
+      font-size: 5.5pt;
+      padding: 1px 3px;
+      margin-top: 1px;
+      margin-bottom: 2px;
+      line-height: 1.2;
+    }
+    
+    /* Reduce spacing between days */
+    .panel-chains .day-section {
+      margin-bottom: 2px !important;
+      page-break-inside: avoid;
+    }
+    
+    /* Compact day headers in print */
+    .panel-chains .day-header {
+      font-size: 6pt !important;
+      margin: 1px 0 0 0 !important;
+      padding: 0 !important;
+      line-height: 1.1;
+    }
+    
+    /* Hide icons and emojis in print */
+    span[title],
+    .icon-arrow-up,
+    .icon-break {
+      display: none;
+    }
+    
+    /* Remove emojis from print */
+    .panel-chains *::before,
+    .panel-chains *::after {
+      content: none !important;
+    }
+    
+    /* Ensure text fits */
+    td {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    /* Compact segment details */
+    td div {
+      font-size: 6pt;
+      line-height: 1.1;
+      margin: 0;
+      padding: 0;
+    }
+    
+    /* Print-friendly colors */
+    .row-standby {
+      background-color: #f0f0f0 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    
+    .row-vacation {
+      background-color: #e0f0f0 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    
+    /* Monthly summary */
+    .panel-chains > div:last-child {
+      margin-top: 8px;
+      page-break-before: auto;
+    }
+    
+    .panel-chains > div:last-child .day-header {
+      font-size: 8pt !important;
+      border-bottom: 1px solid #000 !important;
+      padding-bottom: 2px !important;
+      margin-bottom: 2px !important;
+    }
+    
+    /* Page breaks */
+    .panel-chains .day-section:nth-child(3n) {
+      page-break-after: auto;
+    }
+  }
+  
+  /* Screen styles for summary row */
+  .panel-chains table tbody tr:last-child {
+    background-color: #f2f4f7;
+    font-weight: bold;
+  }
+  
+  .panel-chains table tbody tr:last-child td {
+    border-top: 2px solid #666;
+    padding: 8px 6px;
+  }
+  
+  /* Compact day headers on screen */
+  .panel-chains .day-header {
+    font-size: 10pt;
+    margin-bottom: 4px;
+    color: #333;
+    font-weight: bold;
+  }
+  
+  /* Reduce spacing between days on screen */
+  .panel-chains .day-section {
+    margin-bottom: 8px;
+  }
+</style>
 <div class="card">
   <div class="header-line">
     <h2 class="section-title">{{ person['name'] }}</h2>
@@ -14,7 +284,7 @@
     </div>
   </div>
 
-  <form method="get" class="controls" style="margin: 12px 0;">
+  <form method="get" class="controls no-print" style="margin: 12px 0;">
     <label for="month">חודש:</label>
     <select id="month" name="month">
       {% for m in months %}
@@ -34,7 +304,7 @@
   </form>
 
   <div class="tabs">
-    <div style="background: #e7f5ff; border: 1px solid #bce3ff; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px;">
+    <div class="no-print" style="background: #e7f5ff; border: 1px solid #bce3ff; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px;">
       <h3 style="margin: 0 0 8px; color: #0056b3; font-size: 16px;">סיכום חודשי:</h3>
       <div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
         <div><strong>סה"כ שעות עבודה:</strong> {{ (monthly_totals.total_hours | float / 60) | round(2) }}</div>
@@ -208,20 +478,24 @@
       </section>
 
       <section class="panel panel-chains">
+        <div class="print-header" style="display: none;">
+          <h1 style="margin: 0; font-size: 16pt; text-align: center;">דוח פירוט רצפים - {{ person['name'] }}</h1>
+          <div style="text-align: center; font-size: 10pt; margin: 4px 0;">חודש: {{ "%02d"|format(selected_month) }}/{{ selected_year }}</div>
+        </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
           <h2 style="margin: 0; font-size: 20px;">דוח פירוט רצפים</h2>
-          <button type="button" id="toggleStandbyBtn" onclick="toggleStandby()" style="background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">הסתר כוננויות</button>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" id="toggleStandbyBtn" onclick="toggleStandby()" style="background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">הסתר כוננויות</button>
+            <button type="button" onclick="window.print()" class="no-print" style="background: #007bff; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">🖨️ הדפס דוח</button>
+          </div>
         </div>
         {% if daily_segments %}
         {% for day in daily_segments %}
           {% if day.chains and day.chains|length > 0 %}
-          <div style="margin-bottom: 24px;">
-            <h3 style="margin: 0 0 12px; font-size: 16px; color: #1f6feb;">
-              {{ day.day }} 
-              <span style="color: #666; font-weight: normal; font-size: 0.9em;">
-                (יום {{ day.day_name }}, {{ day.hebrew_date }})
-              </span>
-            </h3>
+          <div class="day-section" style="margin-bottom: 8px;">
+            <div class="day-header" style="margin-bottom: 4px; font-size: 9pt; color: #333; font-weight: bold;">
+              {{ day.day }} ({{ day.day_name }}, {{ day.hebrew_date }})
+            </div>
             <table>
               <thead>
                 <tr>
@@ -230,7 +504,7 @@
                   <th>דירה</th>
                   <th>סוג</th>
                   <th>סה"כ שעות</th>
-                  <th>סה"כ לתשלום</th>
+                  <th>תשלום עבודה</th>
                   <th>פירוט מקטעים</th>
                   <th>100% מחושב</th>
                   <th>125% מחושב</th>
@@ -307,23 +581,34 @@
                   </td>
                 </tr>
                 {% endfor %}
+                <!-- שורת סיכום יומי -->
+                <tr style="background-color: #f2f4f7; font-weight: bold; border-top: 2px solid #666;">
+                  <td colspan="3" style="text-align: right; padding: 4px 6px;">
+                    <strong>סיכום:</strong>
+                  </td>
+                  <td style="text-align: center; padding: 4px 6px; font-weight: bold; font-size: 0.9em;">
+                    {{ "%.2f"|format((day.payment or 0) + (day.standby_payment or 0)) }}
+                  </td>
+                  <td style="text-align: center; padding: 4px 6px;">
+                    {{ (day.total_minutes_no_standby | float / 60) | round(2) }}
+                  </td>
+                  <td style="text-align: center; padding: 4px 6px; font-size: 0.85em;">
+                    {{ "%.2f"|format(day.payment or 0) }}
+                  </td>
+                  <td style="text-align: center; padding: 4px 6px; font-size: 0.85em;">
+                    {{ "%.2f"|format(day.standby_payment or 0) }}
+                  </td>
+                  <td style="text-align: center; padding: 4px 6px;">{{ (day.calc100 | float / 60) | round(2) }}</td>
+                  <td style="text-align: center; padding: 4px 6px;">{{ (day.calc125 | float / 60) | round(2) }}</td>
+                  <td style="text-align: center; padding: 4px 6px;">{{ (day.calc150 | float / 60) | round(2) }}</td>
+                  <td style="text-align: center; padding: 4px 6px;">{{ (day.calc175 | float / 60) | round(2) }}</td>
+                  <td style="text-align: center; padding: 4px 6px;">{{ (day.calc200 | float / 60) | round(2) }}</td>
+                  <td style="text-align: center; padding: 4px 6px;">-</td>
+                </tr>
               </tbody>
             </table>
-            <div style="margin-top: 8px; padding: 8px; background: #f2f4f7; border-radius: 6px; font-size: 14px;">
-              <strong>סיכום יומי:</strong> 
-              סה"כ שעות: {{ (day.total_minutes_no_standby | float / 60) | round(2) }} | 
-              סה"כ לתשלום: {{ "%.2f"|format(day.payment or 0) }} |
-              {% if day.standby_payment and day.standby_payment > 0 %}
-              תשלום כוננות: {{ "%.2f"|format(day.standby_payment) }} |
-              {% endif %}
-              100%: {{ (day.calc100 | float / 60) | round(2) }} | 
-              125%: {{ (day.calc125 | float / 60) | round(2) }} | 
-              150%: {{ (day.calc150 | float / 60) | round(2) }} |
-              175%: {{ (day.calc175 | float / 60) | round(2) }} |
-              200%: {{ (day.calc200 | float / 60) | round(2) }}
-            </div>
             {% if day.cancelled_standbys and day.cancelled_standbys|length > 0 %}
-            <div style="margin-top: 8px; padding: 8px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; font-size: 13px; color: #991b1b;">
+            <div class="no-print" style="margin-top: 8px; padding: 8px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; font-size: 13px; color: #991b1b;">
               <strong>⚠️ כוננות בוטלה:</strong>
               {% for cs in day.cancelled_standbys %}
                 כוננות {{ cs.start // 60 }}:{{ "%02d"|format(cs.start % 60) }}-{{ cs.end // 60 }}:{{ "%02d"|format(cs.end % 60) }} 
@@ -335,6 +620,68 @@
           </div>
           {% endif %}
         {% endfor %}
+        
+        <!-- סיכום חודשי -->
+        {% if daily_segments %}
+        <div style="margin-top: 16px; page-break-before: auto;">
+          <div class="day-header" style="margin-bottom: 4px; font-size: 10pt; color: #000; font-weight: bold; border-bottom: 2px solid #000;">
+            סיכום חודשי - {{ person['name'] }}
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>תחילת רצף</th>
+                <th>סיום רצף</th>
+                <th>דירה</th>
+                <th>סוג</th>
+                <th>סה"כ שעות</th>
+                <th>תשלום עבודה</th>
+                <th>פירוט מקטעים</th>
+                <th>100% מחושב</th>
+                <th>125% מחושב</th>
+                <th>150% מחושב</th>
+                <th>175% מחושב</th>
+                <th>200% מחושב</th>
+                <th>הערות / סיבה לשבירה</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background-color: #e0e0e0; font-weight: bold; border-top: 2px solid #000;">
+                <td colspan="3" style="text-align: right; padding: 6px 8px;">
+                  <strong>סיכום חודשי:</strong>
+                </td>
+                <td style="text-align: center; padding: 6px 8px; font-weight: bold;">
+                  {{ "%.2f"|format((monthly_totals.payment or 0) + (monthly_totals.standby_payment or 0) + (monthly_totals.travel or 0) + (monthly_totals.extras or 0)) }}
+                </td>
+                <td style="text-align: center; padding: 6px 8px;">
+                  {{ (monthly_totals.total_hours | float / 60) | round(2) }}
+                </td>
+                <td style="text-align: center; padding: 6px 8px;">
+                  {{ "%.2f"|format(monthly_totals.payment or 0) }}
+                </td>
+                <td style="text-align: center; padding: 6px 8px; font-size: 0.85em;">
+                  {{ "%.2f"|format(monthly_totals.standby_payment or 0) }}
+                  {% if monthly_totals.travel or monthly_totals.extras %}
+                    {% if monthly_totals.travel %}
+                      | נסיעות: {{ "%.2f"|format(monthly_totals.travel or 0) }}
+                    {% endif %}
+                    {% if monthly_totals.extras %}
+                      | תוספות: {{ "%.2f"|format(monthly_totals.extras or 0) }}
+                    {% endif %}
+                  {% endif %}
+                </td>
+                <td style="text-align: center; padding: 6px 8px;">{{ (monthly_totals.calc100 | float / 60) | round(2) }}</td>
+                <td style="text-align: center; padding: 6px 8px;">{{ (monthly_totals.calc125 | float / 60) | round(2) }}</td>
+                <td style="text-align: center; padding: 6px 8px;">{{ (monthly_totals.calc150 | float / 60) | round(2) }}</td>
+                <td style="text-align: center; padding: 6px 8px;">{{ (monthly_totals.calc175 | float / 60) | round(2) }}</td>
+                <td style="text-align: center; padding: 6px 8px;">{{ (monthly_totals.calc200 | float / 60) | round(2) }}</td>
+                <td style="text-align: center; padding: 6px 8px;">-</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        
         {% else %}
           <div class="muted">אין נתונים לחודש הנבחר.</div>
         {% endif %}

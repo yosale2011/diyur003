@@ -381,44 +381,81 @@ def _build_daily_map(
                              "מחלה" in shift_name)
 
         for p_date, p_start, p_end in parts:
-            if p_date.year != year or p_date.month != month:
-                continue
+            # פיצול מקטעים שחוצים את גבול 08:00
+            CUTOFF = WORK_DAY_START_MINUTES  # 480
+            sub_parts = []
+            if p_start < CUTOFF < p_end:
+                sub_parts.append((p_start, CUTOFF))
+                sub_parts.append((CUTOFF, p_end))
+            else:
+                sub_parts.append((p_start, p_end))
 
-            day_key = p_date.strftime("%d/%m/%Y")
-            entry = daily_map.setdefault(day_key, {"segments": [], "date": p_date})
+            for s_start, s_end in sub_parts:
+                # שיוך ליום עבודה ונרמול זמנים
+                if s_end <= CUTOFF:
+                    # שייך ליום העבודה הקודם
+                    display_date = p_date - timedelta(days=1)
+                    norm_start = s_start + MINUTES_PER_DAY
+                    norm_end = s_end + MINUTES_PER_DAY
+                else:
+                    # שייך ליום העבודה הנוכחי
+                    display_date = p_date
+                    norm_start = s_start
+                    norm_end = s_end
+
+                if display_date.year != year or display_date.month != month:
+                    continue
+
+            day_key = display_date.strftime("%d/%m/%Y")
+            entry = daily_map.setdefault(day_key, {"segments": [], "date": display_date})
 
             is_second_day = (p_date > r_date)
 
-            for seg in seg_list:
-                s_start, s_end = span_minutes(seg["start_time"], seg["end_time"])
-                shift_crosses = (r_end > MINUTES_PER_DAY)
-                if shift_crosses and s_start < r_start:
-                    s_start += MINUTES_PER_DAY
-                    s_end += MINUTES_PER_DAY
+            # Sort segments chronologically by start time before normalizing
+            seg_list_sorted = sorted(seg_list, key=lambda s: span_minutes(s["start_time"], s["end_time"])[0])
+            
+            last_s_end_norm = -1
+            for seg in seg_list_sorted:
+                    # שימוש במשתנים ייחודיים למניעת דריסת משתני הלופ החיצוני
+                    orig_s_start, orig_s_end = span_minutes(seg["start_time"], seg["end_time"])
+                    
+                    while orig_s_start < last_s_end_norm:
+                        orig_s_start += MINUTES_PER_DAY
+                        orig_s_end += MINUTES_PER_DAY
+                    last_s_end_norm = orig_s_end
 
-                if is_second_day:
-                    current_seg_start = s_start - MINUTES_PER_DAY
-                    current_seg_end = s_end - MINUTES_PER_DAY
-                else:
-                    current_seg_start = s_start
-                    current_seg_end = s_end
+                    if is_second_day:
+                        current_seg_start = orig_s_start - MINUTES_PER_DAY
+                        current_seg_end = orig_s_end - MINUTES_PER_DAY
+                    else:
+                        current_seg_start = orig_s_start
+                        current_seg_end = orig_s_end
 
-                overlap = overlap_minutes(p_start, p_end, current_seg_start, current_seg_end)
-                if overlap <= 0:
-                    continue
+                    overlap = overlap_minutes(s_start, s_end, current_seg_start, current_seg_end)
+                    if overlap <= 0:
+                        continue
 
-                eff_start = max(current_seg_start, p_start)
-                eff_end = min(current_seg_end, p_end)
-                eff_type = "vacation" if is_vacation_report else seg["segment_type"]
+                    # נרמול גבולות המקטע לפי workday
+                    eff_start_in_part = max(current_seg_start, s_start)
+                    eff_end_in_part = min(current_seg_end, s_end)
+                    
+                    if s_end <= CUTOFF:
+                        eff_start = eff_start_in_part + MINUTES_PER_DAY
+                        eff_end = eff_end_in_part + MINUTES_PER_DAY
+                    else:
+                        eff_start = eff_start_in_part
+                        eff_end = eff_end_in_part
 
-                segment_id = seg.get("id")
-                apartment_type_id = r.get("apartment_type_id")
-                is_married = r.get("is_married")
+                    eff_type = "vacation" if is_vacation_report else seg["segment_type"]
 
-                entry["segments"].append((
-                    eff_start, eff_end, eff_type,
-                    r["shift_type_id"], segment_id, apartment_type_id, is_married
-                ))
+                    segment_id = seg.get("id")
+                    apartment_type_id = r.get("apartment_type_id")
+                    is_married = r.get("is_married")
+
+                    entry["segments"].append((
+                        eff_start, eff_end, eff_type,
+                        r["shift_type_id"], segment_id, apartment_type_id, is_married
+                    ))
 
     return daily_map
 
@@ -791,6 +828,7 @@ def _process_daily_map(
         # משתני רצף
         current_chain_segments = []
         last_end = None
+        last_etype = None
         day_standby_payment = 0
         day_vacation_minutes = 0
         day_wages = {
@@ -831,23 +869,26 @@ def _process_daily_map(
                 close_chain()
 
             if is_special:
-                is_continuation = (seg_start == 0)
-
-                if seg_type == "standby" and not is_continuation:
-                    seg_id = event.get("segment_id") or 0
-                    apt_type = event.get("apartment_type_id")
-                    is_married_val = event.get("is_married")
-                    is_married_bool = bool(is_married_val) if is_married_val is not None else False
-                    rate = get_standby_rate_fn(seg_id, apt_type, is_married_bool)
-                    day_standby_payment += rate
+                if seg_type == "standby":
+                    # בדיקה האם זו המשכיות של כוננות קודמת
+                    is_continuation = (last_etype == "standby" and last_end == seg_start)
+                    if not is_continuation:
+                        seg_id = event.get("segment_id") or 0
+                        apt_type = event.get("apartment_type_id")
+                        is_married_val = event.get("is_married")
+                        is_married_bool = bool(is_married_val) if is_married_val is not None else False
+                        rate = get_standby_rate_fn(seg_id, apt_type, is_married_bool)
+                        day_standby_payment += rate
                 elif seg_type == "vacation":
                     day_vacation_minutes += (seg_end - seg_start)
 
                 last_end = seg_end
+                last_etype = seg_type
             else:
                 shift_id = event.get("shift_id", 0)
                 current_chain_segments.append((seg_start, seg_end, shift_id))
                 last_end = seg_end
+                last_etype = seg_type
 
         close_chain()
 
@@ -858,16 +899,9 @@ def _process_daily_map(
         totals["standby_payment"] += day_standby_payment
         totals["vacation_minutes"] += day_vacation_minutes
 
-        # ספירת ימי עבודה לפי לוגיקת 08:00-08:00
-        for s, e, sid in work_segments:
-            if s >= WORK_DAY_CUTOFF:
-                work_days_set.add(day_date)
-            elif e > WORK_DAY_CUTOFF:
-                work_days_set.add(day_date)
-            else:
-                prev_day = day_date - timedelta(days=1)
-                if prev_day.year == year and prev_day.month == month:
-                    work_days_set.add(prev_day)
+        # ספירת ימי עבודה - בגרסה המנורמלת, המפתח הוא יום העבודה
+        if work_segments:
+            work_days_set.add(day_date)
 
         if vacation_segments:
             vacation_days_set.add(day_date)
