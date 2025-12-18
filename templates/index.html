@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="header-line">
+    <h2 class="section-title">מדריכים פעילים</h2>
+    <div class="muted">בחר חודש/שנה ואז מדריך להצגת משמרות</div>
+  </div>
+
+  <form method="get" class="controls" style="margin: 12px 0; flex-wrap: wrap; gap: 8px;">
+    <label for="month">חודש:</label>
+    <select id="month" name="month">
+      {% for m in months %}
+        <option value="{{ m.month }}" {% if m.month == selected_month and m.year == selected_year %}selected{% endif %}>{{ m.label }}</option>
+      {% endfor %}
+    </select>
+    <label for="year">שנה:</label>
+    <select id="year" name="year">
+      {% for y in years %}
+        <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+      {% endfor %}
+    </select>
+    <label for="q">חיפוש:</label>
+    <input id="q" name="q" type="text" value="{{ q }}" placeholder="שם מדריך" style="padding: 6px 10px; border:1px solid #c8d1dc; border-radius:6px;">
+    <button type="submit">עדכן</button>
+    {% if selected_month and selected_year %}
+      <span class="muted">חודש מוצג: {{ "%02d"|format(selected_month) }}/{{ selected_year }}</span>
+    {% endif %}
+  </form>
+
+  <table id="guidesTable">
+    <thead>
+      <tr>
+        <th class="sortable" data-sort="name" data-type="text">שם <span class="sort-indicator">⇅</span></th>
+        <th class="sortable" data-sort="type" data-type="text">סוג <span class="sort-indicator">⇅</span></th>
+        <th class="sortable" data-sort="seniority" data-type="number">ותק (שנים) <span class="sort-indicator">⇅</span></th>
+        <th class="sortable" data-sort="shifts" data-type="number">סה\"כ משמרות בחודש <span class="sort-indicator">⇅</span></th>
+        <th class="sortable" data-sort="status" data-type="text">סטטוס <span class="sort-indicator">⇅</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in guides %}
+      <tr>
+        <td data-sort-value="{{ g['name'] }}">
+          <a href="/guide/{{ g['id'] }}{% if selected_month and selected_year %}?month={{ selected_month }}&year={{ selected_year }}{% endif %}" style="text-decoration: none; color: #0969da; font-weight: 500;" title="לחץ לצפייה בדוח מפורט">
+            {{ g['name'] }}
+          </a>
+        </td>
+        <td data-sort-value="{% if g['type'] == 'permanent' %}קבוע{% elif g['type'] == 'substitute' %}מחליף{% else %}{{ g['type'] or '-' }}{% endif %}">
+          {% if g['type'] == 'permanent' %}קבוע
+          {% elif g['type'] == 'substitute' %}מחליף
+          {% else %}{{ g['type'] or '-' }}{% endif %}
+        </td>
+        <td data-sort-value="{{ g.get('seniority_years', '') if g.get('seniority_years') is not none else '' }}">
+          {% if g.get('seniority_years') is not none %}
+            {{ "%.1f"|format(g['seniority_years']) }}
+          {% else %}
+            -
+          {% endif %}
+        </td>
+        <td data-sort-value="{{ counts.get(g['id'], 0) if counts is defined else 0 }}">{{ counts.get(g['id'], 0) if counts is defined else 0 }}</td>
+        <td data-sort-value="{{ 'פעיל' if g['is_active'] else 'לא פעיל' }}">{{ 'פעיל' if g['is_active'] else 'לא פעיל' }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="5" class="muted">לא נמצאו מדריכים</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 20px !important;
+  }
+  .sortable:hover {
+    background: #e8f0ff !important;
+  }
+  .sort-indicator {
+    position: absolute;
+    left: 8px;
+    font-size: 12px;
+    color: #999;
+    opacity: 0.5;
+  }
+  .sortable.sort-asc .sort-indicator::before {
+    content: "↑";
+    opacity: 1;
+    color: #1f6feb;
+  }
+  .sortable.sort-desc .sort-indicator::before {
+    content: "↓";
+    opacity: 1;
+    color: #1f6feb;
+  }
+  .sortable.sort-asc .sort-indicator,
+  .sortable.sort-desc .sort-indicator {
+    opacity: 0;
+  }
+
+  /* Style for employee name links */
+  tbody a {
+    transition: all 0.2s ease;
+    position: relative;
+  }
+
+  tbody a:hover {
+    color: #0860ca !important;
+    text-decoration: underline !important;
+  }
+
+  tbody a::after {
+    content: "🔗";
+    font-size: 12px;
+    opacity: 0;
+    margin-right: 5px;
+    transition: opacity 0.2s ease;
+  }
+
+  tbody a:hover::after {
+    opacity: 0.5;
+  }
+
+  tbody tr:hover {
+    background-color: #f6f8fa;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Add click handler to table rows
+    const tableRows = document.querySelectorAll('#guidesTable tbody tr');
+    tableRows.forEach(row => {
+      const link = row.querySelector('a');
+      if (link) {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', function(e) {
+          // Don't navigate if clicking on the link itself
+          if (e.target.tagName !== 'A' && !e.target.closest('a')) {
+            window.location.href = link.href;
+          }
+        });
+      }
+    });
+
+    const table = document.getElementById('guidesTable');
+    if (!table) return;
+    
+    const tbody = table.querySelector('tbody');
+    const headers = table.querySelectorAll('th.sortable');
+    let currentSort = { column: null, direction: null };
+    
+    headers.forEach(header => {
+      header.addEventListener('click', function() {
+        const sortType = this.dataset.sort;
+        const dataType = this.dataset.type;
+        
+        // Remove sort classes from all headers
+        headers.forEach(h => {
+          h.classList.remove('sort-asc', 'sort-desc');
+        });
+        
+        // Determine sort direction
+        if (currentSort.column === sortType) {
+          currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+          currentSort.direction = 'asc';
+        }
+        currentSort.column = sortType;
+        
+        // Add sort class to current header
+        this.classList.add(currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+        
+        // Sort rows
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const columnIndex = Array.from(header.parentElement.children).indexOf(header);
+        
+        rows.sort((a, b) => {
+          // Skip rows without data (like "לא נמצאו מדריכים")
+          if (a.children.length <= columnIndex || b.children.length <= columnIndex) {
+            return 0;
+          }
+          
+          const aCell = a.children[columnIndex];
+          const bCell = b.children[columnIndex];
+          const aValue = aCell.dataset.sortValue || '';
+          const bValue = bCell.dataset.sortValue || '';
+          
+          let comparison = 0;
+          
+          if (dataType === 'number') {
+            comparison = (parseFloat(aValue) || 0) - (parseFloat(bValue) || 0);
+          } else {
+            // Hebrew text comparison
+            comparison = aValue.localeCompare(bValue, 'he', { sensitivity: 'base' });
+          }
+          
+          return currentSort.direction === 'asc' ? comparison : -comparison;
+        });
+        
+        // Re-append sorted rows
+        rows.forEach(row => tbody.appendChild(row));
+      });
+    });
+  });
+</script>
+{% endblock %}
+

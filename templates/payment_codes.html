@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="header-line">
+        <h2 class="section-title">ניהול סמלי שכר (מירב)</h2>
+        <div class="controls">
+            <a href="/" class="button" style="text-decoration: none; padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; color: #333;">חזרה לדוח</a>
+        </div>
+    </div>
+
+    <p style="color: #666; margin-bottom: 20px;">
+        כאן ניתן לערוך את שמות הרכיבים, קודי מירב, וסדר התצוגה בדוח ייצוא השכר.
+        <br>
+        השינויים ישפיעו על דוח השכר באופן מיידי.
+    </p>
+
+    <form method="post" action="/admin/payment-codes/update">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 50px;">סדר</th>
+                    <th>תיאור רכיב (לתצוגה)</th>
+                    <th>קוד מירב</th>
+                    <th style="width: 150px;">מזהה פנימי (System Key)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for code in codes %}
+                <tr>
+                    <td>
+                        <input type="number" name="display_order_{{ code.id }}" value="{{ code.display_order }}" style="width: 50px; padding: 4px;">
+                    </td>
+                    <td>
+                        <input type="text" name="display_name_{{ code.id }}" value="{{ code.display_name }}" style="width: 100%; padding: 4px; box-sizing: border-box;">
+                    </td>
+                    <td>
+                        <input type="text" name="merav_code_{{ code.id }}" value="{{ code.merav_code }}" style="width: 100%; padding: 4px; box-sizing: border-box;">
+                    </td>
+                    <td>
+                        <input type="text" name="icon_{{ code.id }}" value="{{ code.icon if 'icon' in code.keys() else '' }}" placeholder="⏰" style="width: 100%; padding: 4px; box-sizing: border-box; font-size: 18px; text-align: center;">
+                    </td>
+                    <td class="muted" style="font-family: monospace;">
+                        {{ code.internal_key }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div style="margin-top: 20px; text-align: left;">
+            <button type="submit" style="padding: 10px 20px; font-size: 16px; font-weight: bold; background-color: #28a745; border-color: #28a745;">שמור שינויים</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+

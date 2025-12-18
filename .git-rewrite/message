@@ -1,0 +1,5 @@
+refactor(logic): modularize monthly totals calculation and enhance daily map processing
+
+- Introduced helper functions `_build_daily_map`, `_calculate_chain_wages`, and `_process_daily_map` to streamline the calculation of monthly totals and improve code readability.
+- Removed redundant code from `calculate_person_monthly_totals` by leveraging the new helper functions for building daily maps and processing daily data.
+- Enhanced type hint

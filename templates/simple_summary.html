@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="header-line">
+    <h2 class="section-title">חישוב ישן - {{ person['name'] }}</h2>
+    <div class="muted">
+      <a href="/guide/{{ person['id'] }}?month={{ selected_month }}&year={{ selected_year }}">חזרה לדוח המפורט</a>
+    </div>
+  </div>
+
+  <form method="get" class="controls" style="margin: 12px 0;">
+    <label for="month">חודש:</label>
+    <select id="month" name="month">
+      {% for m in months %}
+        <option value="{{ m.month }}" {% if m.month == selected_month and m.year == selected_year %}selected{% endif %}>{{ m.label }}</option>
+      {% endfor %}
+    </select>
+    <label for="year">שנה:</label>
+    <select id="year" name="year">
+      {% for y in years %}
+        <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">עדכן</button>
+  </form>
+
+  <div style="margin-top: 20px;">
+    <table style="width: 100%; max-width: 600px; font-size: 1.1em;">
+      <thead>
+        <tr>
+          <th>סוג</th>
+          <th>כמות</th>
+          <th>סה"כ לתשלום</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background-color: #f8f9fa;">
+          <td>משמרות חול</td>
+          <td>{{ summary.weekday.count }}</td>
+          <td>{{ summary.weekday.payment | format_currency }}</td>
+        </tr>
+        <tr style="background-color: #fff3e0;">
+          <td>משמרות שישי</td>
+          <td>{{ summary.friday.count }}</td>
+          <td>{{ summary.friday.payment | format_currency }}</td>
+        </tr>
+        <tr style="background-color: #e8f5e9;">
+          <td>משמרות שבת</td>
+          <td>{{ summary.shabbat.count }}</td>
+          <td>{{ summary.shabbat.payment | format_currency }}</td>
+        </tr>
+        
+        <!-- שעות נוספות - אם נדרש להציג בנפרד (כרגע כלול בתשלום המשמרות הנ"ל אלא אם כן נפריד) -->
+        <!-- נציג כשורה אינפורמטיבית או כסיכום של השעות החריגות? -->
+        <!-- המשתמש ביקש "X שעות עבודה נוספות X כסף". -->
+        <!-- אם הכוונה היא לשעות נוספות *בתוך* המשמרות, אז זה כבר משולם. -->
+        <!-- נציג את רכיב השעות הנוספות מתוך הסה"כ -->
+        <tr style="color: #666; font-size: 0.9em; border-top: 1px dashed #ccc;">
+          <td>מתוכן: שעות נוספות (125%+)</td>
+          <td>{{ summary.overtime.hours }} שעות</td>
+          <td>{{ summary.overtime.payment | format_currency }}</td>
+        </tr>
+
+        <tr style="font-weight: bold; border-top: 2px solid #333; font-size: 1.2em;">
+          <td>סה"כ לתשלום</td>
+          <td>-</td>
+          <td>{{ (summary.weekday.payment + summary.friday.payment + summary.shabbat.payment) | format_currency }}</td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <div style="margin-top: 20px; font-size: 0.9em; color: #666;">
+        * החישוב כולל את כל רכיבי השכר (כולל שעות נוספות ושבת) ומסכם אותם לפי יום תחילת המשמרת.<br>
+        * שורת "שעות נוספות" מציגה את החלק היחסי של התוספת מתוך הסה"כ.
+    </div>
+  </div>
+</div>
+{% endblock %}

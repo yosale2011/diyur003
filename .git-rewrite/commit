@@ -1,0 +1,11 @@
+tree fc8c962c837295f7c5c8819b273d886899911753
+parent dc526e08436e5cd26733d1c1af1b991a6021973c
+author Yosale2011 <yosale2011@gmail.com> 1766066642 +0200
+committer Yosale2011 <yosale2011@gmail.com> 1766066642 +0200
+
+refactor(logic): modularize monthly totals calculation and enhance daily map processing
+
+- Introduced helper functions `_build_daily_map`, `_calculate_chain_wages`, and `_process_daily_map` to streamline the calculation of monthly totals and improve code readability.
+- Removed redundant code from `calculate_person_monthly_totals` by leveraging the new helper functions for building daily maps and processing daily data.
+- Enhanced type hints and added additional imports for better type handling.
+- Improved overall structure and maintainability of the logic for calculating employee payment summaries.

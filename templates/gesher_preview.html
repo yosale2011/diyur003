@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    main { max-width: 95% !important; }
+    .export-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    .export-table th, .export-table td { 
+        border: 1px solid #ddd; 
+        padding: 8px; 
+        text-align: center; 
+    }
+    .export-table th { background: #f2f4f7; }
+    .export-table tr:nth-child(even) { background: #f9f9f9; }
+    .person-row { background: #e3f2fd !important; font-weight: bold; }
+    .symbol-row td:first-child { padding-right: 30px; }
+    .code-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .type-hours { background: #e8f5e9; color: #2e7d32; }
+    .type-money { background: #fff3e0; color: #ef6c00; }
+    .type-days { background: #e3f2fd; color: #1565c0; }
+    .legend { display: flex; gap: 20px; margin: 20px 0; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 8px; }
+</style>
+
+<div class="card" style="max-width: none; width: 100%;">
+    <div class="header-line">
+        <h2 class="section-title">תצוגה מקדימה - ייצוא גשר</h2>
+        <div class="controls">
+            <form method="get" style="display: flex; gap: 10px; align-items: center;">
+                <select name="month" onchange="this.form.submit()">
+                    {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
+                    {% endfor %}
+                </select>
+                <select name="year" onchange="this.form.submit()">
+                    {% for y in years %}
+                    <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer;">
+                    <input type="checkbox" name="show_zero" value="1" {% if show_zero %}checked{% endif %} onchange="this.form.submit()">
+                    הצג גם ערכים 0
+                </label>
+            </form>
+        </div>
+    </div>
+
+    <!-- בחירת מפעל והורדה -->
+    <div style="margin: 20px 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px;">
+        <div style="color: white; margin-bottom: 12px;">
+            <strong style="font-size: 18px;">🏭 ייצוא לפי מפעל</strong>
+            <div style="font-size: 13px; opacity: 0.9;">בחר מפעל והורד קובץ גשר לכל העובדים במפעל</div>
+        </div>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+            {% for emp in employers %}
+            <a href="/export/gesher?year={{ selected_year }}&month={{ selected_month }}&company={{ emp.code }}" 
+               style="background: white; color: #667eea; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; display: flex; flex-direction: column; align-items: center; min-width: 140px;">
+                <span style="font-size: 24px;">📥</span>
+                <span>{{ emp.name }}</span>
+                <span style="font-size: 12px; opacity: 0.7;">קוד {{ emp.code }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+        <a href="/summary?year={{ selected_year }}&month={{ selected_month }}" class="button" style="text-decoration: none; padding: 8px 16px;">
+            חזרה לסיכום
+        </a>
+    </div>
+
+    <!-- מקרא קודים -->
+    <div class="legend">
+        <strong>קודי ייצוא:</strong>
+        {% for symbol, (key, vtype, display_name) in export_codes.items() %}
+        <div class="legend-item">
+            <span class="code-badge type-{{ vtype }}">{{ symbol }}</span>
+            <span>{{ display_name }}</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- טבלת תצוגה מקדימה -->
+    <div style="overflow-x: auto;">
+        <table class="export-table">
+            <thead>
+                <tr>
+                    <th style="text-align: right;">עובד</th>
+                    <th>קוד מירב</th>
+                    <th>סמל</th>
+                    <th>שדה</th>
+                    <th>סוג</th>
+                    <th>ערך</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for person in preview %}
+                <tr class="person-row">
+                    <td style="text-align: right;" rowspan="{{ person.lines|length + 1 }}">{{ person.name }}</td>
+                    <td rowspan="{{ person.lines|length + 1 }}">{{ person.meirav_code }}</td>
+                    <td colspan="4"></td>
+                </tr>
+                {% for line in person.lines %}
+                <tr class="symbol-row">
+                    <td><span class="code-badge">{{ line.symbol }}</span></td>
+                    <td>{{ line.display_name }}</td>
+                    <td>
+                        {% if 'hours' in line.type %}שעות
+                        {% elif line.type == 'money' %}₪
+                        {% elif line.type == 'days' or line.type == 'days_with_total_hours' %}ימים
+                        {% elif line.type == 'standby_with_rate' %}כוננויות
+                        {% else %}יחידות{% endif %}
+                    </td>
+                    <td>
+                        {% if line.type == 'money' %}
+                            {{ "%.2f"|format(line.payment) }} ₪
+                        {% else %}
+                            {{ "%.2f"|format(line.quantity) }}
+                            {% if line.payment > 0 %}
+                                <span style="color: #888; font-size: 0.85em;">(תעריף: {{ "%.2f"|format(line.payment) }})</span>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if not preview %}
+    <div style="text-align: center; padding: 40px; color: #666;">
+        <h3>אין נתונים לייצוא</h3>
+        <p>לא נמצאו עובדים עם קוד מירב ונתוני שכר לחודש זה.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
