@@ -339,8 +339,6 @@
 
     <input type="radio" id="tab-shifts" name="tabset" checked>
     <label for="tab-shifts">משמרות</label>
-    <input type="radio" id="tab-segments" name="tabset">
-    <label for="tab-segments">מקטעי זמן</label>
     <input type="radio" id="tab-chains" name="tabset">
     <label for="tab-chains">פירוט רצפים</label>
     <input type="radio" id="tab-monthly" name="tabset">
@@ -428,72 +426,6 @@
         </table>
         {% else %}
           <div class="muted">אין משמרות לחודש זה.</div>
-        {% endif %}
-      </section>
-
-      <section class="panel panel-segments">
-        {% if daily_segments %}
-        <table>
-          <thead>
-            <tr>
-              <th>תאריך</th>
-              <th>שם משמרת</th>
-              <th>שעות עבודה</th>
-              <th>שעות 100%</th>
-              <th>כוננות</th>
-              <th>שעות 150%</th>
-              <th>שעות 175%</th>
-              <th>שעות 200%</th>
-              <th>100% מחושב</th>
-              <th>125% מחושב</th>
-              <th>150% מחושב</th>
-              <th>אחר</th>
-              <th>סה\"כ שעות</th>
-              <th>סה\"כ שעות בלי כוננות</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for day in daily_segments %}
-            {% set buckets = day.buckets %}
-            {% set other_keys = [] %}
-            {% for k,v in buckets.items() if k not in ['שעות עבודה','100%','כוננות','125%','150%','175%','200%'] %}
-              {% set _ = other_keys.append(k) %}
-            {% endfor %}
-            <tr>
-              <td>{{ day.day }}</td>
-              <td>
-                {% if day.shift_names %}
-                  {{ day.shift_names|join(', ') }}
-                {% else %}
-                  -
-                {% endif %}
-              </td>
-              <td>{{ (buckets.get('שעות עבודה') or 0) | float / 60 | round(2) }}</td>
-              <td>{{ (buckets.get('100%') or 0) | float / 60 | round(2) }}</td>
-              <td>{{ (buckets.get('כוננות') or 0) | float / 60 | round(2) }}</td>
-              <td>{{ (buckets.get('150%') or 0) | float / 60 | round(2) }}</td>
-              <td>{{ (buckets.get('175%') or 0) | float / 60 | round(2) }}</td>
-              <td>{{ (buckets.get('200%') or 0) | float / 60 | round(2) }}</td>
-              <td>{{ (day.calc100 or 0) | float / 60 | round(2) }}</td>
-              <td>{{ (day.calc125 or 0) | float / 60 | round(2) }}</td>
-              <td>{{ (day.calc150 or 0) | float / 60 | round(2) }}</td>
-              <td>
-                {% if other_keys %}
-                  {% for k in other_keys %}
-                    {{ k }}: {{ (buckets.get(k) or 0) | float / 60 | round(2) }}{% if not loop.last %}, {% endif %}
-                  {% endfor %}
-                {% else %}
-                  0
-                {% endif %}
-              </td>
-              <td>{{ (day.total_minutes or 0) | float / 60 | round(2) }}</td>
-              <td>{{ (day.total_minutes_no_standby or 0) | float / 60 | round(2) }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% else %}
-          <div class="muted">אין מקטעי זמן לחודש הנבחר.</div>
         {% endif %}
       </section>
 
