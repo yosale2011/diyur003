@@ -407,6 +407,7 @@ def _build_daily_map(
     בניית מפת ימים מדיווחים.
     מחלצת את הלוגיקה המשותפת של בניית daily_map משתי הפונקציות.
     """
+    from utils import overlap_minutes
     daily_map = {}
 
     for r in reports:
@@ -522,7 +523,12 @@ def _build_daily_map(
                         eff_start = eff_start_in_part
                         eff_end = eff_end_in_part
 
-                    eff_type = "vacation" if is_vacation_report else seg["segment_type"]
+                    eff_type = seg["segment_type"]
+                    
+                    # Override standby to work if this is actual work reported during standby hours
+                    if eff_type == "standby" and not is_vacation_report:
+                        # If there's an actual work report (not vacation/sick), treat it as work
+                        eff_type = "work"
 
                     segment_id = seg.get("id")
                     apartment_type_id = r.get("apartment_type_id")
@@ -842,6 +848,7 @@ def _process_daily_map(
     Returns:
         (day_totals, work_days_set, vacation_days_set)
     """
+    from utils import calculate_accruals
     WORK_DAY_CUTOFF = 480  # 08:00
 
     totals = {
@@ -855,6 +862,7 @@ def _process_daily_map(
 
     # Track carryover minutes from previous day's chain ending at 08:00
     prev_day_carryover_minutes = 0
+    prev_day_ended_at_midnight = False
 
     for day_key, entry in sorted(daily_map.items()):
         day_date = entry["date"]
@@ -967,7 +975,7 @@ def _process_daily_map(
                 first_work_start = evt["start"]
                 break
 
-        use_carryover = (first_work_start == WORK_DAY_CUTOFF and prev_day_carryover_minutes > 0)
+        use_carryover = (first_work_start == WORK_DAY_CUTOFF or prev_day_ended_at_midnight) and prev_day_carryover_minutes > 0
         current_offset = prev_day_carryover_minutes if use_carryover else 0
 
         # משתני רצף
@@ -1006,6 +1014,10 @@ def _process_daily_map(
             # Check if chain ends at 08:00 boundary (1920 = 08:00 + 1440)
             last_chain_ended_at_0800 = (current_chain_segments[-1][1] == 1920) if current_chain_segments else False
 
+            # Check if chain ends at midnight (1440)
+            last_segment_end = current_chain_segments[-1][1] if current_chain_segments else 0
+            prev_day_ended_at_midnight = (last_segment_end == 1440)
+
             current_chain_segments = []
 
         for event in all_events:
@@ -1021,7 +1033,17 @@ def _process_daily_map(
                 if is_special:
                     should_break = True
                 elif last_end is not None:
-                    gap = seg_start - last_end
+                    # Calculate gap considering normalized times
+                    # If seg_start is less than WORK_DAY_CUTOFF (480), it's from previous day and normalized
+                    if seg_start < WORK_DAY_CUTOFF and last_end >= MINUTES_PER_DAY:
+                        # Both segments are normalized (after midnight)
+                        gap = seg_start - last_end
+                    elif seg_start < WORK_DAY_CUTOFF and last_end < WORK_DAY_CUTOFF:
+                        # Both segments are before 08:00 (normalized)
+                        gap = seg_start - last_end
+                    else:
+                        # Regular gap calculation
+                        gap = seg_start - last_end
                     if gap > BREAK_THRESHOLD_MINUTES:
                         should_break = True
 
@@ -1098,6 +1120,7 @@ def calculate_person_monthly_totals(
     """
     חישוב מדויק של סיכומים חודשיים לעובד.
     """
+    from utils import month_range_ts, calculate_accruals
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     
     # שליפת פרטי העובד
@@ -1256,6 +1279,7 @@ def _calculate_totals_from_data(
     Helper for calculating totals from pre-fetched data.
     Uses shared helper functions to avoid code duplication.
     """
+    from utils import calculate_accruals
     # Initialize totals
     monthly_totals = {
         "total_hours": 0, "payment": 0, "standby": 0, "standby_payment": 0,
@@ -1352,6 +1376,9 @@ def _calculate_totals_from_data(
     return monthly_totals
 
 def calculate_monthly_summary(conn, year: int, month: int) -> Tuple[List[Dict], Dict]:
+    # Import month_range_ts locally to avoid circular imports
+    from utils import month_range_ts
+    
     # 1. Fetch Payment Codes
     payment_codes = get_payment_codes(conn)
     
