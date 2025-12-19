@@ -868,20 +868,57 @@ def _process_daily_map(
                 deduped_standby.append(sb)
                 seen_standby.add(key)
         standby_segments = deduped_standby
+        
+        # איחוד מקטעי כוננות רציפים לפני בדיקת ביטול
+        # כדי להבטיח שבודקים את כל תקופת הכוננות המלאה, לא כל חלק בנפרד
+        standby_segments.sort(key=lambda x: x[0])
+        merged_standbys = []
+        for sb in standby_segments:
+            sb_start, sb_end, sb_seg_id, sb_apt, sb_married = sb
+            if merged_standbys and sb_start <= merged_standbys[-1][1]:  # חופפים או רציפים
+                # הרחבת הכוננות הקודמת
+                prev = merged_standbys[-1]
+                merged_standbys[-1] = (prev[0], max(prev[1], sb_end), prev[2], prev[3], prev[4])
+            else:
+                merged_standbys.append(sb)
 
-        # ביטול כוננות אם יש חפיפה מעל 70%
-        standby_filtered = []
-        for sb_start, sb_end, sb_seg_id, sb_apt, sb_married in standby_segments:
-            standby_duration = sb_end - sb_start
-            if standby_duration <= 0:
-                continue
-
-            total_overlap = sum(overlap_minutes(sb_start, sb_end, w[0], w[1]) for w in work_segments)
-            overlap_ratio = total_overlap / standby_duration
-
-            if overlap_ratio < STANDBY_CANCEL_OVERLAP_THRESHOLD:
-                standby_filtered.append((sb_start, sb_end, sb_seg_id, sb_apt, sb_married))
-        standby_segments = standby_filtered
+        # ביטול כוננות אם יש חפיפה מעל 70% - הוחלף בלוגיקת קיזוז (Trim)
+        # במקום לבטל את הכוננות כליל, אנו מקזזים את זמני העבודה מזמן הכוננות
+        final_standby_segments = []
+        for sb in merged_standbys:
+            sb_start, sb_end, sb_seg_id, sb_apt, sb_married = sb
+            
+            # Start with the full standby segment
+            remaining_parts = [(sb_start, sb_end)]
+            
+            # Subtract each work segment
+            for w_start, w_end, _ in work_segments:
+                new_parts = []
+                for r_start, r_end in remaining_parts:
+                    # Calculate intersection
+                    inter_start = max(r_start, w_start)
+                    inter_end = min(r_end, w_end)
+                    
+                    if inter_start < inter_end:
+                        # There is overlap, subtract it
+                        # Part before overlap
+                        if r_start < inter_start:
+                            new_parts.append((r_start, inter_start))
+                        # Part after overlap
+                        if inter_end < r_end:
+                            new_parts.append((inter_end, r_end))
+                    else:
+                        # No overlap, keep original
+                        new_parts.append((r_start, r_end))
+                remaining_parts = new_parts
+            
+            # Add resulting parts to final list
+            for r_start, r_end in remaining_parts:
+                if r_end > r_start:
+                    final_standby_segments.append((r_start, r_end, sb_seg_id, sb_apt, sb_married))
+        
+        standby_segments = final_standby_segments
+        standby_segments.sort(key=lambda x: x[0])
 
         # איחוד אירועים
         all_events = []
@@ -922,6 +959,9 @@ def _process_daily_map(
         first_chain_of_day = True
         last_chain_total = 0
         last_chain_ended_at_0800 = False
+        
+        # Track paid standby segments to avoid double payment on split segments
+        paid_standby_ids = set()
 
         def close_chain(minutes_offset=0):
             nonlocal current_chain_segments, day_wages, last_chain_total, last_chain_ended_at_0800
@@ -967,13 +1007,21 @@ def _process_daily_map(
                 if seg_type == "standby":
                     # בדיקה האם זו המשכיות של כוננות קודמת
                     is_continuation = (last_etype == "standby" and last_end == seg_start)
-                    if not is_continuation:
+                    
+                    # בדיקה אם כבר שילמנו על המקטע הזה (למקרה שפוצל עקב עבודה באמצע)
+                    seg_id = event.get("segment_id")
+                    already_paid = (seg_id in paid_standby_ids) if seg_id else False
+                    
+                    if not is_continuation and not already_paid:
                         seg_id = event.get("segment_id") or 0
                         apt_type = event.get("apartment_type_id")
                         is_married_val = event.get("is_married")
                         is_married_bool = bool(is_married_val) if is_married_val is not None else False
                         rate = get_standby_rate_fn(seg_id, apt_type, is_married_bool)
                         day_standby_payment += rate
+                        
+                        if seg_id:
+                            paid_standby_ids.add(seg_id)
                 elif seg_type == "vacation":
                     day_vacation_minutes += (seg_end - seg_start)
 

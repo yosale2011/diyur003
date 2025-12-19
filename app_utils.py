@@ -334,11 +334,24 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                 deduped_sb.append(sb)
                 seen_sb.add(k)
         standby_segments = deduped_sb
+        
+        # Merge continuous standby segments BEFORE cancellation check
+        # This ensures we check the FULL standby period, not individual fragments
+        standby_segments.sort(key=lambda x: x[0])
+        merged_standbys = []
+        for sb in standby_segments:
+            sb_start, sb_end, seg_id, apt_type, married, actual_date = sb
+            if merged_standbys and sb_start <= merged_standbys[-1][1]:  # Overlapping or adjacent
+                # Extend the previous merged standby
+                prev = merged_standbys[-1]
+                merged_standbys[-1] = (prev[0], max(prev[1], sb_end), prev[2], prev[3], prev[4], prev[5])
+            else:
+                merged_standbys.append(sb)
 
-        # Standby Cancellation Logic
+        # Standby Cancellation Logic - now checks MERGED standbys
         cancelled_standbys = []
         valid_standby = []
-        for sb in standby_segments:
+        for sb in merged_standbys:
             sb_start, sb_end = sb[0], sb[1]
             duration = sb_end - sb_start
             if duration <= 0: continue
