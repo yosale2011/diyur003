@@ -409,17 +409,19 @@
               <th>סוג משמרת</th>
               <th>דירה</th>
               <th>אישור</th>
+              <th>הזכאות לתשלום</th>
             </tr>
           </thead>
           <tbody>
-            {% for r in reports %}
+            {% for shift in shift_segments %}
             <tr>
-              <td>{{ r['date']|human_date }}</td>
-              <td>{{ r['start_time'] or '-' }}</td>
-              <td>{{ r['end_time'] or '-' }}</td>
-              <td>{{ r['shift_name'] or r['shift_type'] or '-' }}</td>
-              <td>{{ r['apartment_name'] or r['apartment_id'] or '-' }}</td>
-              <td>{{ 'מאושר' if r['is_approved'] else 'ממתין' }}</td>
+              <td>{{ shift['report']['date']|human_date }}</td>
+              <td>{{ shift['report']['start_time'] or '-' }}</td>
+              <td>{{ shift['report']['end_time'] or '-' }}</td>
+              <td>{{ shift['report']['shift_name'] or shift['report']['shift_type'] or '-' }}</td>
+              <td>{{ shift['report']['apartment_name'] or shift['report']['apartment_id'] or '-' }}</td>
+              <td>{{ 'מאושר' if shift['report']['is_approved'] else 'ממתין' }}</td>
+              <td>{{ "%.2f"|format(shift['payment']) }}</td>
             </tr>
             {% endfor %}
           </tbody>

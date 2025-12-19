@@ -51,9 +51,16 @@ def general_summary(
     month_start_ts = int(month_start.timestamp())
     month_end_ts = int(month_end.timestamp())
 
+    conn_start = time.time()
     with get_conn() as conn:
+        conn_time = time.time() - conn_start
+        logger.info(f"Database connection took: {conn_time:.4f}s")
+        
         # 1. Fetch Payment Codes
+        payment_start = time.time()
         payment_codes = get_payment_codes(conn.conn)
+        payment_time = time.time() - payment_start
+        logger.info(f"Payment codes fetch took: {payment_time:.4f}s")
 
         pre_calc_time = time.time()
         logger.info("Starting optimized calculation...")
@@ -65,10 +72,9 @@ def general_summary(
         logger.info(f"Optimized calculation took: {loop_time:.4f}s")
 
     year_options = [2023, 2024, 2025, 2026]
-    total_time = time.time() - start_time
-    logger.info(f"Total general_summary execution time: {total_time:.4f}s")
-
-    return templates.TemplateResponse("general_summary.html", {
+    
+    render_start = time.time()
+    response = templates.TemplateResponse("general_summary.html", {
         "request": request,
         "payment_codes": payment_codes,
         "summary_data": summary_data,
@@ -77,3 +83,10 @@ def general_summary(
         "selected_month": month,
         "years": year_options
     })
+    render_time = time.time() - render_start
+    logger.info(f"Template rendering took: {render_time:.4f}s")
+    
+    total_time = time.time() - start_time
+    logger.info(f"Total general_summary execution time: {total_time:.4f}s")
+    
+    return response

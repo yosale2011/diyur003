@@ -10,7 +10,7 @@
     <label for="month">חודש:</label>
     <select id="month" name="month">
       {% for m in months %}
-        <option value="{{ m.month }}" {% if m.month == selected_month and m.year == selected_year %}selected{% endif %}>{{ m.label }}</option>
+        <option value="{{ m.month }}" data-year="{{ m.year }}" {% if m.month == selected_month and m.year == selected_year %}selected{% endif %}>{{ m.label }}</option>
       {% endfor %}
     </select>
     <label for="year">שנה:</label>
@@ -131,6 +131,29 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
+    // Auto-submit form when month or year changes
+    const monthSelect = document.getElementById('month');
+    const yearSelect = document.getElementById('year');
+    const form = document.querySelector('form.controls');
+    
+    if (monthSelect && form) {
+      monthSelect.addEventListener('change', function() {
+        // Update year dropdown to match the selected month's year
+        const selectedOption = monthSelect.options[monthSelect.selectedIndex];
+        const yearFromMonth = selectedOption.getAttribute('data-year');
+        if (yearFromMonth && yearSelect) {
+          yearSelect.value = yearFromMonth;
+        }
+        form.submit();
+      });
+    }
+    
+    if (yearSelect && form) {
+      yearSelect.addEventListener('change', function() {
+        form.submit();
+      });
+    }
+
     // Add click handler to table rows
     const tableRows = document.querySelectorAll('#guidesTable tbody tr');
     tableRows.forEach(row => {

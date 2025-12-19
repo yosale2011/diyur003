@@ -20,7 +20,8 @@ from logic import (
     calculate_person_monthly_totals,
 )
 from app_utils import get_daily_segments_data
-from utils import human_date, format_currency
+from utils import human_date, format_currency, month_range_ts
+import psycopg2.extras
 
 templates = Jinja2Templates(directory=str(config.TEMPLATES_DIR))
 templates.env.filters["human_date"] = human_date
@@ -210,14 +211,13 @@ def guide_view(
             )
 
             # Get raw reports for the template
-            from utils import month_range_ts
             start_dt, end_dt = month_range_ts(selected_year, selected_month)
             # Convert datetime to date for PostgreSQL date column
             start_date = start_dt.date()
             end_date = end_dt.date()
             month_reports = conn.execute("""
                 SELECT tr.*, st.name as shift_name,
-                       a.apartment_type_id,
+                       a.apartment_type_id, a.name as apartment_name,
                        p.is_married
                 FROM time_reports tr
                 LEFT JOIN shift_types st ON st.id = tr.shift_type_id
@@ -227,15 +227,70 @@ def guide_view(
                 ORDER BY tr.date, tr.start_time
             """, (person_id, start_date, end_date)).fetchall()
 
-            # Get shift segments for display
+            # Get shift segments with payment calculation
             shift_segments = []
             for report in month_reports:
-                segments = []
-                # This would need the segment calculation logic
-                # For now, we'll keep it simple
+                # Calculate payment for this specific shift
+                shift_payment = 0.0
+                shift_standby_payment = 0.0
+                
+                if report['shift_type_id']:
+                    # Get segments for this shift type
+                    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                    cursor.execute("""
+                        SELECT start_time, end_time, wage_percent, segment_type
+                        FROM shift_time_segments
+                        WHERE shift_type_id = %s
+                        ORDER BY order_index
+                    """, (report['shift_type_id'],))
+                    segments = cursor.fetchall()
+                    cursor.close()
+                    
+                    # Calculate payment based on segments
+                    for seg in segments:
+                        # Convert time strings to minutes
+                        if isinstance(seg['start_time'], str):
+                            hours, minutes = map(int, seg['start_time'].split(':'))
+                            start_time = hours * 60 + minutes
+                        else:
+                            start_time = seg['start_time']
+                            
+                        if isinstance(seg['end_time'], str):
+                            hours, minutes = map(int, seg['end_time'].split(':'))
+                            end_time = hours * 60 + minutes
+                        else:
+                            end_time = seg['end_time']
+                            
+                        duration = (end_time - start_time) / 60  # Convert minutes to hours
+                        
+                        if seg['segment_type'] == 'standby':
+                            # Standby payment logic
+                            apt_type = report.get('apartment_type_id')
+                            is_married = report.get('is_married', False)
+                            # Use default standby rate or calculate based on apartment type
+                            standby_rate = 70.0  # Default rate
+                            shift_standby_payment += standby_rate
+                        else:
+                            # Work payment based on wage percent
+                            hourly_rate = MINIMUM_WAGE
+                            if seg['wage_percent'] == 100:
+                                shift_payment += duration * hourly_rate * 1.0
+                            elif seg['wage_percent'] == 125:
+                                shift_payment += duration * hourly_rate * 1.25
+                            elif seg['wage_percent'] == 150:
+                                shift_payment += duration * hourly_rate * 1.5
+                            elif seg['wage_percent'] == 175:
+                                shift_payment += duration * hourly_rate * 1.75
+                            elif seg['wage_percent'] == 200:
+                                shift_payment += duration * hourly_rate * 2.0
+                
+                total_shift_payment = shift_payment + shift_standby_payment
+                
                 shift_segments.append({
                     "report": report,
-                    "segments": segments
+                    "payment": total_shift_payment,
+                    "work_payment": shift_payment,
+                    "standby_payment": shift_standby_payment
                 })
 
     # Calculate total standby count
