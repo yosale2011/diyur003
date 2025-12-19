@@ -868,10 +868,11 @@
                         <td>{{ code.merav_code or '' }}</td>
                         
                         {% if key == 'standby' %}
-                            <td>{{ val - total_cancelled }}</td>
+                            {% set net_count = val - total_cancelled %}
+                            <td>{{ net_count }}</td>
                             <td>
-                                {% if val > 0 %}
-                                    {{ "%.2f"|format((monthly_totals.standby_payment or 0) / val) }} ₪
+                                {% if net_count > 0 %}
+                                    {{ "%.2f"|format((monthly_totals.standby_payment or 0) / net_count) }} ₪
                                 {% else %}
                                     0.00 ₪
                                 {% endif %}
