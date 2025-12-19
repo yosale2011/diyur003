@@ -13,6 +13,7 @@ from config import config
 from database import get_conn
 from logic import (
     available_months_from_db,
+    get_active_guides,
 )
 from utils import month_range_ts, human_date, format_currency
 
@@ -28,17 +29,8 @@ def home(
     q: Optional[str] = None
 ) -> HTMLResponse:
     """Home page route showing guides and monthly overview."""
-    with get_conn() as conn:
-        guides = conn.execute(
-            """
-            SELECT id, name, type, is_active, start_date
-            FROM people
-            WHERE is_active::integer = 1
-            ORDER BY name
-            """
-        ).fetchall()
-
-        months_all = available_months_from_db(conn.conn)
+    guides = get_active_guides()
+    months_all = available_months_from_db()
 
     if months_all:
         if month is None or year is None:

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 import psycopg2
 import psycopg2.extras
@@ -10,8 +8,8 @@ from zoneinfo import ZoneInfo
 from convertdate import hebrew
 
 # Import utilities and config
-from utils import overlap_minutes, month_range_ts, calculate_accruals
 from config import config
+from cache_manager import cached
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -201,11 +199,18 @@ def available_months(rows: Iterable[Dict]) -> List[Tuple[int, int]]:
     return sorted(months)
 
 
-def available_months_from_db(conn) -> List[Tuple[int, int]]:
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute("SELECT DISTINCT date FROM time_reports")
-    rows = cursor.fetchall()
-    cursor.close()
+@cached(ttl=3600)  # Cache for 1 hour since months data doesn't change frequently
+def available_months_from_db() -> List[Tuple[int, int]]:
+    """Fetch distinct months from time_reports table."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cursor.execute("SELECT DISTINCT date FROM time_reports")
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+    
     months: set[Tuple[int, int]] = set()
     for r in rows:
         ts = r["date"]
@@ -214,6 +219,28 @@ def available_months_from_db(conn) -> List[Tuple[int, int]]:
         d = to_local_date(ts)
         months.add((d.year, d.month))
     return sorted(months)
+
+
+@cached(ttl=1800)  # Cache for 30 minutes since guide data changes infrequently
+def get_active_guides() -> List[Dict[str, Any]]:
+    """Fetch active guides from people table."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cursor.execute(
+            """
+            SELECT id, name, type, is_active, start_date
+            FROM people
+            WHERE is_active::integer = 1
+            ORDER BY name
+            """
+        )
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return [dict(row) for row in rows]
 
 
 def get_available_months_for_person(conn, person_id: int) -> List[Tuple[int, int]]:
