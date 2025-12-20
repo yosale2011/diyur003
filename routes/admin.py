@@ -15,6 +15,7 @@ from utils import human_date, format_currency
 templates = Jinja2Templates(directory=str(config.TEMPLATES_DIR))
 templates.env.filters["human_date"] = human_date
 templates.env.filters["format_currency"] = format_currency
+templates.env.globals["app_version"] = config.VERSION
 
 
 def manage_payment_codes(request: Request) -> HTMLResponse:

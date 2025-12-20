@@ -622,6 +622,9 @@ def _build_daily_map(
                         eff_end = eff_end_in_part
 
                     eff_type = seg["segment_type"]
+                    # אם זה דיווח חופשה/מחלה - סמן כחופשה
+                    if is_vacation_report:
+                        eff_type = "vacation"
 
                     segment_id = seg.get("id")
                     apartment_type_id = r.get("apartment_type_id")
@@ -1602,7 +1605,8 @@ def calculate_monthly_summary(conn, year: int, month: int) -> Tuple[List[Dict], 
     grand_totals = {code["internal_key"]: 0 for code in payment_codes}
     grand_totals.update({
         "payment": 0, "standby_payment": 0, "travel": 0, "extras": 0, "total_payment": 0,
-        "calc150_shabbat_100": 0, "calc150_shabbat_50": 0
+        "calc150_shabbat_100": 0, "calc150_shabbat_50": 0,
+        "vacation_payment": 0, "vacation_minutes": 0
     })
 
     # 8. Iterate and Calculate

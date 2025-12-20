@@ -3,47 +3,36 @@
 {% block content %}
 <style>
     main { max-width: 95% !important; }
-
-    /* Style for employee name links */
-    tbody a {
-        transition: all 0.2s ease;
-        font-weight: bold;
-    }
-
-    tbody a:hover {
-        color: #0860ca !important;
-        text-decoration: underline !important;
-    }
-
-    tbody tr:hover {
-        background-color: #f6f8fa;
-    }
+    tbody a { transition: all 0.2s ease; font-weight: bold; }
+    tbody a:hover { color: #0860ca !important; text-decoration: underline !important; }
+    tbody tr:hover { background-color: #f6f8fa; }
+    .compact-cell { font-size: 11px; white-space: nowrap; }
+    .combined-header { font-size: 11px; }
+    .combined-header div { font-size: 10px; }
 </style>
 <div class="card" style="max-width: none; width: 100%;">
-    <div class="header-line">
-        <h2 class="section-title">
+    <div class="header-line" style="flex-wrap: wrap; gap: 10px;">
+        <h2 class="section-title" style="font-size: 18px; margin: 0;">
             סיכום שכר כללי - כל המדריכים
-            <span style="font-size: 0.7em; color: #666; font-weight: normal; margin-right: 10px;">
-                ({{ summary_data|length }} מדריכים)
-            </span>
+            <span style="font-size: 0.7em; color: #666; font-weight: normal;">({{ summary_data|length }} מדריכים)</span>
         </h2>
-        <div class="controls">
-            <form method="get" style="display: flex; gap: 10px; align-items: center;">
-                <select name="month" onchange="this.form.submit()">
+        <div class="controls" style="flex-wrap: wrap; gap: 6px;">
+            <form method="get" style="display: flex; gap: 6px; align-items: center;">
+                <select name="month" onchange="this.form.submit()" style="padding: 4px 6px; font-size: 13px;">
                     {% for m in range(1, 13) %}
                     <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
                     {% endfor %}
                 </select>
-                <select name="year" onchange="this.form.submit()">
+                <select name="year" onchange="this.form.submit()" style="padding: 4px 6px; font-size: 13px;">
                     {% for y in years %}
                     <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
                     {% endfor %}
                 </select>
             </form>
-            <button onclick="window.print()" class="button" style="padding: 6px 12px;">הדפס דוח</button>
-            <a href="/export/excel?year={{ selected_year }}&month={{ selected_month }}" class="button" style="text-decoration: none; padding: 6px 12px; background: #28a745; color: white;">ייצוא אקסל</a>
-            <a href="/export/gesher/preview?year={{ selected_year }}&month={{ selected_month }}" class="button" style="text-decoration: none; padding: 6px 12px; background: #007bff; color: white;">ייצוא גשר</a>
-            <a href="/" class="button" style="text-decoration: none; padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; color: #333;">חזרה</a>
+            <button onclick="window.print()" style="padding: 4px 10px; font-size: 12px;">הדפס דוח</button>
+            <a href="/export/excel?year={{ selected_year }}&month={{ selected_month }}" style="text-decoration: none; padding: 4px 10px; font-size: 12px; background: #28a745; color: white; border-radius: 4px;">ייצוא אקסל</a>
+            <a href="/export/gesher/preview?year={{ selected_year }}&month={{ selected_month }}" style="text-decoration: none; padding: 4px 10px; font-size: 12px; background: #007bff; color: white; border-radius: 4px;">ייצוא גשר</a>
+            <a href="/" style="text-decoration: none; padding: 4px 10px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; color: #333;">חזרה</a>
         </div>
     </div>
 
@@ -63,179 +52,61 @@
         {% endif %}
     {% endfor %}
     
-    <div style="overflow-x: auto; margin-top: 20px; width: 100%;">
-        <table id="summaryTable" style="width: 100%; border-collapse: collapse; min-width: 1600px; table-layout: auto;">
-            <thead>
-                <tr style="background: #f2f4f7;">
-                    <th onclick="sortTable(this.cellIndex)" style="cursor: pointer; position: sticky; right: 0; background: #f2f4f7; z-index: 2; border-left: 2px solid #ddd;">שם המדריך ⇅</th>
-                    <!-- Dynamic Columns from Payment Codes -->
-                    {% for code in payment_codes %}
-                    {% if code.internal_key not in ['sick_days_accrued', 'vacation_days_accrued', 'vacation_days_taken', 'travel', 'extras', 'calc150_shabbat_100', 'calc150_shabbat_50', 'sick_days_taken'] %}
-                    
-                    {% set display_text = code.display_name %}
-                    {% if code.internal_key == 'actual_work_days' %}
-                        {% set display_text = 'ימי עבודה' %}
-                    {% elif code.internal_key == 'total_hours' %}
-                        {% set display_text = 'סהכ שעות' %}
-                    {% endif %}
-                    
-                    {% set icon = code.icon if 'icon' in code.keys() and code.icon else '' %}
-                    {% if not icon %}
-                        {# Fallback icons if not in DB #}
-                        {% if code.internal_key == 'calc100' %}
-                            {% set icon = '⏰' %}
-                        {% elif code.internal_key == 'calc125' %}
-                            {% set icon = '⏱️' %}
-                        {% elif code.internal_key == 'calc150_shabbat' %}
-                            {% set icon = '🕯️' %}
-                        {% elif code.internal_key == 'calc150_overtime' %}
-                            {% set icon = '⏱️' %}
-                        {% elif code.internal_key == 'calc175' %}
-                            {% set icon = '🕯️' %}
-                        {% elif code.internal_key == 'calc200' %}
-                            {% set icon = '🕯️' %}
-                        {% elif code.internal_key == 'standby' %}
-                            {% set icon = '💤' %}
-                        {% elif code.internal_key == 'vacation' %}
-                            {% set icon = '🏖️' %}
-                        {% elif code.internal_key == 'total_hours' %}
-                            {% set icon = '⏰' %}
-                        {% elif code.internal_key == 'actual_work_days' %}
-                            {% set icon = '📅' %}
-                        {% endif %}
-                    {% endif %}
-
-                    <th onclick="sortTable(this.cellIndex)" style="cursor: pointer;" title="{{ code.display_name }} ({{ code.merav_code }})">
-                        {% if icon %}{{ icon }} {% endif %}{{ display_text }}
-                        <div style="font-size: 0.8em; color: #666; font-weight: normal;">{{ code.merav_code }}</div>
-                    </th>
-                    {% endif %}
-                    {% endfor %}
-                    <!-- עמודות כוננויות, נסיעות ותוספות -->
-                    <th onclick="sortTable(this.cellIndex)" style="cursor: pointer; background: #dbeafe;" title="כוננויות ({{ ns.standby }})">
-                        💤 כוננויות (₪)
-                        <div style="font-size: 0.8em; color: #666; font-weight: normal;">{{ ns.standby }}</div>
-                    </th>
-                    <th onclick="sortTable(this.cellIndex)" style="cursor: pointer; background: #fef3c7;" title="נסיעות ({{ ns.travel }})">
-                        🚗 נסיעות
-                        <div style="font-size: 0.8em; color: #666; font-weight: normal;">{{ ns.travel }}</div>
-                    </th>
-                    <th onclick="sortTable(this.cellIndex)" style="cursor: pointer; background: #fce7f3;" title="תוספות ({{ ns.extras }})">
-                        💰 תוספות
-                        <div style="font-size: 0.8em; color: #666; font-weight: normal;">{{ ns.extras }}</div>
-                    </th>
-                    <th onclick="sortTable(this.cellIndex)" style="cursor: pointer; background: #e7f5ff; font-weight: bold;">סה"כ לתשלום ⇅</th>
+    <div style="overflow-x: auto; overflow-y: auto; max-height: 75vh; margin-top: 12px; width: 100%;">
+        <table id="summaryTable" style="width: 100%; border-collapse: collapse; table-layout: auto; font-size: 11px;">
+            <thead style="position: sticky; top: 0; z-index: 10;">
+                <tr style="background: #f2f4f7; font-size: 10px;">
+                    <th onclick="sortTable(0)" style="cursor: pointer; position: sticky; right: 0; top: 0; background: #f2f4f7; z-index: 12; border-left: 2px solid #ddd; padding: 4px 6px; white-space: nowrap;">שם ⇅</th>
+                    <th onclick="sortTable(1)" style="cursor: pointer; padding: 2px 4px;" title="שעות רגילות 100%">100%<div style="font-size: 8px; color: #888;">360</div></th>
+                    <th onclick="sortTable(2)" style="cursor: pointer; padding: 2px 4px;" title="שעות נוספות 125%">125%<div style="font-size: 8px; color: #888;">366</div></th>
+                    <th onclick="sortTable(3)" style="cursor: pointer; padding: 2px 4px;" title="שעות נוספות 150%">150%<div style="font-size: 8px; color: #888;">368</div></th>
+                    <th onclick="sortTable(4)" style="cursor: pointer; padding: 2px 4px; background: #e8f5e9;" title="שבת 150%">🕯️150<div style="font-size: 8px; color: #888;">130</div></th>
+                    <th onclick="sortTable(5)" style="cursor: pointer; padding: 2px 4px; background: #e8f5e9;" title="שבת 175%">175<div style="font-size: 8px; color: #888;">382</div></th>
+                    <th onclick="sortTable(6)" style="cursor: pointer; padding: 2px 4px; background: #e8f5e9;" title="שבת 200%">200<div style="font-size: 8px; color: #888;">434</div></th>
+                    <th onclick="sortTable(7)" style="cursor: pointer; padding: 2px 4px;" title="שעות בתעריף משתנה">משתנה<div style="font-size: 8px; color: #888;">363</div></th>
+                    <th onclick="sortTable(8)" style="cursor: pointer; padding: 2px 4px;" title="ימי עבודה">ימים<div style="font-size: 8px; color: #888;">767</div></th>
+                    <th onclick="sortTable(9)" style="cursor: pointer; padding: 2px 4px;" title="סה״כ שעות">סהכ<div style="font-size: 8px; color: #888;">199</div></th>
+                    <th onclick="sortTable(10)" style="cursor: pointer; padding: 2px 4px;" title="חופשה">חופשה<div style="font-size: 8px; color: #888;">376</div></th>
+                    <th onclick="sortTable(11)" style="cursor: pointer; padding: 2px 4px; background: #dbeafe;" title="כוננויות">כוננות<div style="font-size: 8px; color: #888;">{{ ns.standby }}</div></th>
+                    <th onclick="sortTable(12)" style="cursor: pointer; padding: 2px 4px; background: #e7f5ff; font-weight: bold;">סה"כ</th>
                 </tr>
             </thead>
             <tbody>
                 {% for row in summary_data %}
                 <tr>
-                    <td style="position: sticky; right: 0; background: #fff; z-index: 1; border-left: 2px solid #eee; font-weight: bold;">
-                        <a href="/guide/{{ row.person_id }}?year={{ selected_year }}&month={{ selected_month }}" style="text-decoration: none; color: #0969da;" title="לחץ לצפייה בדוח מפורט">
-                            {{ row.name }}
-                        </a>
+                    <td style="position: sticky; right: 0; background: #fff; z-index: 1; border-left: 2px solid #eee; font-weight: bold; padding: 2px 6px;">
+                        <a href="/guide/{{ row.person_id }}?year={{ selected_year }}&month={{ selected_month }}" style="text-decoration: none; color: #0969da; font-size: 11px;" title="לחץ לצפייה בדוח מפורט">{{ row.name }}</a>
                     </td>
-                    {% for code in payment_codes %}
-                        {% if code.internal_key not in ['sick_days_accrued', 'vacation_days_accrued', 'vacation_days_taken', 'travel', 'extras', 'calc150_shabbat_100', 'calc150_shabbat_50', 'sick_days_taken'] %}
-                        {% set key = code.internal_key %}
-                        {% set val = row.totals[key] or 0 %}
-                        
-                        <td style="text-align: center;">
-                            {% if val > 0 %}
-                                {% if key == 'standby' %}
-                                    {{ val }}
-                                {% elif key == 'actual_work_days' %}
-                                    {{ val }}
-                                {% else %}
-                                    <!-- For money/hours fields, showing the calculated amount/hours based on type? -->
-                                    <!-- In the summary, usually we want Value (Hours/Units) OR Money? -->
-                                    <!-- Let's show Value (Money in tooltip) -->
-                                    <div>
-                                        {% if key == 'total_hours' or 'calc' in key or key == 'vacation' %}
-                                            {{ (val | float / 60) | round(2) }}
-                                        {% else %}
-                                            {{ "%.2f"|format(val) }}
-                                        {% endif %}
-                                    </div>
-                                    <!-- Optional: Add money calculation logic here if needed, but simplistic for now -->
-                                {% endif %}
-                            {% else %}
-                                <span style="color: #eee;">-</span>
-                            {% endif %}
-                        </td>
-                        {% endif %}
-                    {% endfor %}
-                    <!-- כוננויות (סכום) -->
-                    <td style="text-align: center; background: #eff6ff;">
-                        {% if row.totals.standby_payment and row.totals.standby_payment > 0 %}
-                            {{ "%.2f"|format(row.totals.standby_payment) }}
-                        {% else %}
-                            <span style="color: #eee;">-</span>
-                        {% endif %}
-                    </td>
-                    <!-- נסיעות -->
-                    <td style="text-align: center; background: #fffbeb;">
-                        {% if row.totals.travel and row.totals.travel > 0 %}
-                            {{ "%.2f"|format(row.totals.travel) }}
-                        {% else %}
-                            <span style="color: #eee;">-</span>
-                        {% endif %}
-                    </td>
-                    <!-- תוספות/החזרים -->
-                    <td style="text-align: center; background: #fdf2f8;">
-                        {% if row.totals.extras and row.totals.extras > 0 %}
-                            {{ "%.2f"|format(row.totals.extras) }}
-                        {% else %}
-                            <span style="color: #eee;">-</span>
-                        {% endif %}
-                    </td>
-                    <td style="background: #e7f5ff; font-weight: bold;">
-                        {{ (row.totals.total_payment or row.totals.payment or 0) | format_currency }}
-                    </td>
+                    <td style="text-align: center; padding: 2px;">{% set v = row.totals.calc100 or 0 %}{% if v > 0 %}{{ (v|float/60)|round(1) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = row.totals.calc125 or 0 %}{% if v > 0 %}{{ (v|float/60)|round(1) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = row.totals.calc150_overtime or 0 %}{% if v > 0 %}{{ (v|float/60)|round(1) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: center; padding: 2px; background: #f0fdf4;">{% set v = row.totals.calc150_shabbat or 0 %}{% if v > 0 %}{{ (v|float/60)|round(1) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: center; padding: 2px; background: #f0fdf4;">{% set v = row.totals.calc175 or 0 %}{% if v > 0 %}{{ (v|float/60)|round(1) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: center; padding: 2px; background: #f0fdf4;">{% set v = row.totals.calc200 or 0 %}{% if v > 0 %}{{ (v|float/60)|round(1) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = row.totals.calc_variable or 0 %}{% if v > 0 %}{{ (v|float/60)|round(1) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = row.totals.actual_work_days or 0 %}{% if v > 0 %}{{ v }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = row.totals.total_hours or 0 %}{% if v > 0 %}{{ (v|float/60)|round(1) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = row.totals.vacation_payment or 0 %}{% if v > 0 %}{{ "%.0f"|format(v) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: center; padding: 2px; background: #eff6ff;">{% if row.totals.standby_payment and row.totals.standby_payment > 0 %}{{ "%.0f"|format(row.totals.standby_payment) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="background: #e7f5ff; font-weight: bold; padding: 2px; text-align: center;">{{ "{:,.0f}".format((row.totals.total_payment or row.totals.payment or 0)) }}</td>
                 </tr>
                 {% endfor %}
                 
                 <!-- Grand Totals Row -->
-                <tr style="background: #333; color: #fff; font-weight: bold;">
-                    <td style="position: sticky; right: 0; background: #333; z-index: 1; border-left: 2px solid #555;">סה"כ כללי</td>
-                    {% for code in payment_codes %}
-                        {% if code.internal_key not in ['sick_days_accrued', 'vacation_days_accrued', 'vacation_days_taken', 'travel', 'extras', 'calc150_shabbat_100', 'calc150_shabbat_50', 'sick_days_taken'] %}
-                        {% set key = code.internal_key %}
-                        {% set sum_val = grand_totals[key] or 0 %}
-                        <td style="text-align: center;">
-                            {% if sum_val > 0 %}
-                                {% if key == 'standby' or key == 'actual_work_days' %}
-                                    {{ sum_val }}
-                                {% elif key == 'total_hours' or 'calc' in key or key == 'vacation' %}
-                                    {{ (sum_val | float / 60) | round(2) }}
-                                {% else %}
-                                    {{ "%.2f"|format(sum_val) }}
-                                {% endif %}
-                            {% endif %}
-                        </td>
-                        {% endif %}
-                    {% endfor %}
-                    <!-- כוננויות (סכום) -->
-                    <td style="text-align: center; background: #1e40af; color: #fff;">
-                        {% if grand_totals.standby_payment and grand_totals.standby_payment > 0 %}
-                            {{ "%.2f"|format(grand_totals.standby_payment) }}
-                        {% endif %}
-                    </td>
-                    <!-- נסיעות -->
-                    <td style="text-align: center; background: #b45309; color: #fff;">
-                        {% if grand_totals.travel and grand_totals.travel > 0 %}
-                            {{ "%.2f"|format(grand_totals.travel) }}
-                        {% endif %}
-                    </td>
-                    <!-- תוספות -->
-                    <td style="text-align: center; background: #be185d; color: #fff;">
-                        {% if grand_totals.extras and grand_totals.extras > 0 %}
-                            {{ "%.2f"|format(grand_totals.extras) }}
-                        {% endif %}
-                    </td>
-                    <td style="background: #444;">
-                        {{ (grand_totals.payment or 0) | format_currency }}
-                    </td>
+                <tr style="background: #333; color: #fff; font-weight: bold; font-size: 10px;">
+                    <td style="position: sticky; right: 0; background: #333; z-index: 1; border-left: 2px solid #555; padding: 4px 6px;">סה"כ</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = grand_totals.calc100 or 0 %}{% if v > 0 %}{{ (v|float/60)|round(0) }}{% endif %}</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = grand_totals.calc125 or 0 %}{% if v > 0 %}{{ (v|float/60)|round(0) }}{% endif %}</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = grand_totals.calc150_overtime or 0 %}{% if v > 0 %}{{ (v|float/60)|round(0) }}{% endif %}</td>
+                    <td style="text-align: center; padding: 2px; background: #2d4a2d;">{% set v = grand_totals.calc150_shabbat or 0 %}{% if v > 0 %}{{ (v|float/60)|round(0) }}{% endif %}</td>
+                    <td style="text-align: center; padding: 2px; background: #2d4a2d;">{% set v = grand_totals.calc175 or 0 %}{% if v > 0 %}{{ (v|float/60)|round(0) }}{% endif %}</td>
+                    <td style="text-align: center; padding: 2px; background: #2d4a2d;">{% set v = grand_totals.calc200 or 0 %}{% if v > 0 %}{{ (v|float/60)|round(0) }}{% endif %}</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = grand_totals.calc_variable or 0 %}{% if v > 0 %}{{ (v|float/60)|round(0) }}{% endif %}</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = grand_totals.actual_work_days or 0 %}{% if v > 0 %}{{ v }}{% endif %}</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = grand_totals.total_hours or 0 %}{% if v > 0 %}{{ (v|float/60)|round(0) }}{% endif %}</td>
+                    <td style="text-align: center; padding: 2px;">{% set v = grand_totals.vacation_payment or 0 %}{% if v > 0 %}{{ "%.0f"|format(v) }}{% endif %}</td>
+                    <td style="text-align: center; padding: 2px; background: #1e40af;">{% if grand_totals.standby_payment and grand_totals.standby_payment > 0 %}{{ "%.0f"|format(grand_totals.standby_payment) }}{% endif %}</td>
+                    <td style="background: #444; padding: 2px; text-align: center;">{{ "{:,.0f}".format(grand_totals.payment or 0) }}</td>
                 </tr>
             </tbody>
         </table>
