@@ -407,9 +407,9 @@
             <tr style="background-color: #f8f9fa;">
               <td>משמרות חול</td>
               <td>{{ simple_summary.weekday.count }}</td>
-              <td>{{ weekday_per | round(0) | int }}</td>
-              <td style="color: #1f6feb;">{{ (weekday_per + standby_per) | round(0) | int }}</td>
-              <td>{{ (simple_summary.weekday.count * (weekday_per + standby_per)) | format_currency }}</td>
+              <td>{{ (weekday_per - standby_per) | round(0) | int }}</td>
+              <td style="color: #1f6feb;">{{ weekday_per | round(0) | int }}</td>
+              <td>{{ simple_summary.weekday.payment | format_currency }}</td>
             </tr>
             {% endif %}
 
@@ -418,9 +418,9 @@
             <tr style="background-color: #fff3e0;">
               <td>משמרות שישי</td>
               <td>{{ simple_summary.friday.count }}</td>
-              <td>{{ friday_per | round(0) | int }}</td>
-              <td style="color: #1f6feb;">{{ (friday_per + standby_per) | round(0) | int }}</td>
-              <td>{{ (simple_summary.friday.count * (friday_per + standby_per)) | format_currency }}</td>
+              <td>{{ (friday_per - standby_per) | round(0) | int }}</td>
+              <td style="color: #1f6feb;">{{ friday_per | round(0) | int }}</td>
+              <td>{{ simple_summary.friday.payment | format_currency }}</td>
             </tr>
             {% endif %}
 
@@ -429,9 +429,9 @@
             <tr style="background-color: #e8f5e9;">
               <td>משמרות שבת</td>
               <td>{{ simple_summary.saturday.count }}</td>
-              <td>{{ saturday_per | round(0) | int }}</td>
-              <td style="color: #1f6feb;">{{ (saturday_per + standby_per) | round(0) | int }}</td>
-              <td>{{ (simple_summary.saturday.count * (saturday_per + standby_per)) | format_currency }}</td>
+              <td>{{ (saturday_per - standby_per) | round(0) | int }}</td>
+              <td style="color: #1f6feb;">{{ saturday_per | round(0) | int }}</td>
+              <td>{{ simple_summary.saturday.payment | format_currency }}</td>
             </tr>
             {% endif %}
 
@@ -440,9 +440,9 @@
             <tr style="background-color: #e0e7ff;">
               <td>משמרות לילה</td>
               <td>{{ simple_summary.night.count }}</td>
-              <td>{{ night_per | round(0) | int }}</td>
-              <td style="color: #1f6feb;">{{ (night_per + standby_per) | round(0) | int }}</td>
-              <td>{{ (simple_summary.night.count * (night_per + standby_per)) | format_currency }}</td>
+              <td>{{ (night_per - standby_per) | round(0) | int }}</td>
+              <td style="color: #1f6feb;">{{ night_per | round(0) | int }}</td>
+              <td>{{ simple_summary.night.payment | format_currency }}</td>
             </tr>
             {% endif %}
 
@@ -451,9 +451,9 @@
             <tr style="background-color: #fef9c3;">
               <td>שעות מעבר</td>
               <td>{{ simple_summary.hours.count }}</td>
-              <td>{{ hours_per | round(0) | int }}</td>
-              <td style="color: #1f6feb;">{{ (hours_per + standby_per) | round(0) | int }}</td>
-              <td>{{ (simple_summary.hours.count * (hours_per + standby_per)) | format_currency }}</td>
+              <td>{{ (hours_per - standby_per) | round(0) | int }}</td>
+              <td style="color: #1f6feb;">{{ hours_per | round(0) | int }}</td>
+              <td>{{ simple_summary.hours.payment | format_currency }}</td>
             </tr>
             {% endif %}
 
@@ -482,7 +482,7 @@
               <td>{{ simple_summary.weekday.count + simple_summary.friday.count + simple_summary.saturday.count + simple_summary.night.count + simple_summary.hours.count }}</td>
               <td>-</td>
               <td>-</td>
-              <td>{{ (simple_summary.weekday.payment + simple_summary.friday.payment + simple_summary.saturday.payment + simple_summary.night.payment + simple_summary.hours.payment + simple_summary.standby.payment_total + simple_summary.travel + simple_summary.extras) | format_currency }}</td>
+              <td>{{ (simple_summary.weekday.payment + simple_summary.friday.payment + simple_summary.saturday.payment + simple_summary.night.payment + simple_summary.hours.payment + simple_summary.travel + simple_summary.extras) | format_currency }}</td>
             </tr>
           </tbody>
         </table>
