@@ -4,6 +4,8 @@ Contains routes for viewing guide details and summaries.
 """
 from __future__ import annotations
 
+import time
+import logging
 from datetime import datetime
 from typing import Optional, Tuple, List, Dict, Any
 
@@ -24,6 +26,7 @@ from app_utils import get_daily_segments_data
 from utils import human_date, format_currency, month_range_ts
 import psycopg2.extras
 
+logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory=str(config.TEMPLATES_DIR))
 templates.env.filters["human_date"] = human_date
 templates.env.filters["format_currency"] = format_currency
@@ -36,19 +39,31 @@ def simple_summary_view(
     year: Optional[int] = None
 ) -> HTMLResponse:
     """Simple summary view for a guide."""
+    start_time = time.time()
+    logger.info(f"Starting simple_summary_view for person_id={person_id}, {month}/{year}")
+
+    conn_start = time.time()
     with get_conn() as conn:
+        conn_time = time.time() - conn_start
+        logger.info(f"Database connection took: {conn_time:.4f}s")
         # Defaults
         if month is None or year is None:
             now = datetime.now(config.LOCAL_TZ)
             year, month = now.year, now.month
 
         # Minimum Wage (cached)
+        wage_start = time.time()
         minimum_wage = get_minimum_wage(conn.conn)
+        logger.info(f"get_minimum_wage took: {time.time() - wage_start:.4f}s")
 
+        shabbat_start = time.time()
         shabbat_cache = get_shabbat_times_cache(conn.conn)
+        logger.info(f"get_shabbat_times_cache took: {time.time() - shabbat_start:.4f}s")
 
         # Get data
+        segments_start = time.time()
         daily_segments, person_name = get_daily_segments_data(conn, person_id, year, month, shabbat_cache, minimum_wage)
+        logger.info(f"get_daily_segments_data took: {time.time() - segments_start:.4f}s")
 
         person = conn.execute("SELECT * FROM people WHERE id = %s", (person_id,)).fetchone()
 
@@ -103,7 +118,8 @@ def simple_summary_view(
             summary["overtime"]["payment"] += overtime_payment
             summary["total_payment"] += day_payment
 
-    return templates.TemplateResponse(
+    render_start = time.time()
+    response = templates.TemplateResponse(
         "simple_summary.html",
         {
             "request": request,
@@ -114,6 +130,13 @@ def simple_summary_view(
             "person_name": person_name,
         },
     )
+    render_time = time.time() - render_start
+    logger.info(f"Template rendering took: {render_time:.4f}s")
+
+    total_time = time.time() - start_time
+    logger.info(f"Total simple_summary_view execution time: {total_time:.4f}s")
+
+    return response
 
 
 def guide_view(
@@ -123,9 +146,18 @@ def guide_view(
     year: Optional[int] = None
 ) -> HTMLResponse:
     """Detailed guide view with full monthly report."""
+    start_time = time.time()
+    logger.info(f"Starting guide_view for person_id={person_id}, {month}/{year}")
+
+    conn_start = time.time()
     with get_conn() as conn:
+        conn_time = time.time() - conn_start
+        logger.info(f"Database connection took: {conn_time:.4f}s")
+
         # שליפת שכר מינימום מה-DB (cached)
+        wage_start = time.time()
         MINIMUM_WAGE = get_minimum_wage(conn.conn)
+        logger.info(f"get_minimum_wage took: {time.time() - wage_start:.4f}s")
 
         person = conn.execute(
             "SELECT id, name, phone, email, type, is_active, start_date FROM people WHERE id = %s",
@@ -135,7 +167,9 @@ def guide_view(
             raise HTTPException(status_code=404, detail="מדריך לא נמצא")
 
         # Fetch payment codes early to avoid connection issues later
+        payment_start = time.time()
         payment_codes = get_payment_codes(conn.conn)
+        logger.info(f"get_payment_codes took: {time.time() - payment_start:.4f}s")
         if not payment_codes:
             # Try once more with a fresh connection if first fetch failed
             try:
@@ -147,7 +181,9 @@ def guide_view(
                 logger.warning(f"Secondary fetch of payment codes failed: {e}")
 
         # Optimized: Fetch available months
+        months_start = time.time()
         months = get_available_months_for_person(conn.conn, person_id)
+        logger.info(f"get_available_months_for_person took: {time.time() - months_start:.4f}s")
 
         # Prepare months options for template
         months_options = [{"year": y, "month": m, "label": f"{m:02d}/{y}"} for y, m in months]
@@ -188,13 +224,21 @@ def guide_view(
                 selected_year, selected_month = year, month
 
             # Get monthly data
+            shabbat_start = time.time()
             shabbat_cache = get_shabbat_times_cache(conn.conn)
+            logger.info(f"get_shabbat_times_cache took: {time.time() - shabbat_start:.4f}s")
+
+            segments_calc_start = time.time()
             daily_segments, person_name = get_daily_segments_data(
                 conn, person_id, selected_year, selected_month, shabbat_cache, MINIMUM_WAGE
             )
+            logger.info(f"get_daily_segments_data took: {time.time() - segments_calc_start:.4f}s")
+
+            totals_start = time.time()
             monthly_totals = calculate_person_monthly_totals(
                 conn.conn, person_id, selected_year, selected_month, shabbat_cache, MINIMUM_WAGE
             )
+            logger.info(f"calculate_person_monthly_totals took: {time.time() - totals_start:.4f}s")
 
             # Get raw reports for the template
             start_dt, end_dt = month_range_ts(selected_year, selected_month)
@@ -324,7 +368,8 @@ def guide_view(
             simple_summary["saturday"]["count"] += 1
             simple_summary["saturday"]["payment"] += day_payment
 
-    return templates.TemplateResponse(
+    render_start = time.time()
+    response = templates.TemplateResponse(
         "guide.html",
         {
             "request": request,
@@ -344,3 +389,10 @@ def guide_view(
             "simple_summary": simple_summary,
         },
     )
+    render_time = time.time() - render_start
+    logger.info(f"Template rendering took: {render_time:.4f}s")
+
+    total_time = time.time() - start_time
+    logger.info(f"Total guide_view execution time: {total_time:.4f}s")
+
+    return response

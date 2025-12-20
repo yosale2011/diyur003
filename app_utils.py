@@ -213,10 +213,24 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                         # But we continue to see if there are others.
                         pass
                 
-                # If no segment starts before report (e.g. report 05:00, first seg 06:00), 
-                # then it belongs to the LAST segment (from yesterday)
+                # If no segment starts before report time:
+                # - If report starts BEFORE the first segment of the shift definition,
+                #   keep rotate_idx=0 (start from the first segment)
+                # - If report starts AFTER all segments (late in day),
+                #   then it might belong to the LAST segment wrapping around
+                # For a report 08:00-08:00 with first segment at 12:00,
+                # the 08:00-12:00 gap is just waiting time, so start from segment 0
                 if best_start_diff == -1 and seg_list_sorted:
-                    rotate_idx = len(seg_list_sorted) - 1
+                    first_seg_start, _ = span_minutes(seg_list_sorted[0]["start_time"], seg_list_sorted[0]["end_time"])
+                    last_seg_start, last_seg_end = span_minutes(seg_list_sorted[-1]["start_time"], seg_list_sorted[-1]["end_time"])
+
+                    # If report starts before first segment, use first segment
+                    if rep_start_min < first_seg_start:
+                        rotate_idx = 0
+                    # If report starts late (e.g. 05:00 when last segment is 22:00-08:00),
+                    # it belongs to the last segment (wrapping from yesterday)
+                    else:
+                        rotate_idx = len(seg_list_sorted) - 1
                 
                 seg_list_ordered = seg_list_sorted[rotate_idx:] + seg_list_sorted[:rotate_idx]
                 
