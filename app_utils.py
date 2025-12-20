@@ -663,14 +663,15 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
         for sb in standby_segments:
             total_minutes += sb[1] - sb[0]
 
-        # מיון chains לפי זמן התחלה (עם טיפול בזמנים מנורמלים)
+        # מיון chains לפי זמן התחלה ביום עבודה (08:00-08:00)
+        # זמנים לפני 08:00 שייכים לסוף יום העבודה ולכן ממוינים אחרי זמנים מ-08:00+
         def chain_sort_key(c):
-            # המרת זמן התחלה לדקות (0-1440 לזמנים רגילים, 1440+ לזמנים מנורמלים)
             t = c.get("start_time", "00:00")
             h, m = map(int, t.split(":"))
             minutes = h * 60 + m
-            # אם from_prev_day (אחרי חצות), נוסיף 1440
-            if c.get("from_prev_day"):
+            # יום עבודה מתחיל ב-08:00 (480 דקות)
+            # זמנים 00:00-07:59 הם בעצם 24:00-31:59 ביום העבודה
+            if minutes < 480:  # לפני 08:00
                 minutes += MINUTES_PER_DAY
             return minutes
 
