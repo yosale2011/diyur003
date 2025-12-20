@@ -146,7 +146,7 @@ def guide_view(
     year: Optional[int] = None
 ) -> HTMLResponse:
     """Detailed guide view with full monthly report."""
-    start_time = time.time()
+    func_start_time = time.time()
     logger.info(f"Starting guide_view for person_id={person_id}, {month}/{year}")
 
     conn_start = time.time()
@@ -176,8 +176,6 @@ def guide_view(
                 with get_conn() as temp_conn:
                     payment_codes = get_payment_codes(temp_conn.conn)
             except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.warning(f"Secondary fetch of payment codes failed: {e}")
 
         # Optimized: Fetch available months
@@ -289,17 +287,17 @@ def guide_view(
                         # Convert time strings to minutes
                         if isinstance(seg['start_time'], str):
                             hours, minutes = map(int, seg['start_time'].split(':'))
-                            start_time = hours * 60 + minutes
+                            seg_start_min = hours * 60 + minutes
                         else:
-                            start_time = seg['start_time']
-                            
+                            seg_start_min = seg['start_time']
+
                         if isinstance(seg['end_time'], str):
                             hours, minutes = map(int, seg['end_time'].split(':'))
-                            end_time = hours * 60 + minutes
+                            seg_end_min = hours * 60 + minutes
                         else:
-                            end_time = seg['end_time']
-                            
-                        duration = (end_time - start_time) / 60  # Convert minutes to hours
+                            seg_end_min = seg['end_time']
+
+                        duration = (seg_end_min - seg_start_min) / 60  # Convert minutes to hours
                         
                         # Check if this is actual work reported during standby hours
                         work_type = report.get('work_type')
@@ -392,7 +390,7 @@ def guide_view(
     render_time = time.time() - render_start
     logger.info(f"Template rendering took: {render_time:.4f}s")
 
-    total_time = time.time() - start_time
+    total_time = time.time() - func_start_time
     logger.info(f"Total guide_view execution time: {total_time:.4f}s")
 
     return response

@@ -243,26 +243,27 @@ def available_months(rows: Iterable[Dict]) -> List[Tuple[int, int]]:
     return sorted(months)
 
 
-@cached(ttl=3600)  # Cache for 1 hour since months data doesn't change frequently
+@cached(ttl=300)  # Cache for 5 minutes
 def available_months_from_db() -> List[Tuple[int, int]]:
     """Fetch distinct months from time_reports table."""
     conn = get_db_connection()
     try:
         cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        cursor.execute("SELECT DISTINCT date FROM time_reports")
+        # Optimized: extract year/month directly in SQL instead of fetching all dates
+        cursor.execute("""
+            SELECT DISTINCT
+                EXTRACT(YEAR FROM date)::integer AS year,
+                EXTRACT(MONTH FROM date)::integer AS month
+            FROM time_reports
+            WHERE date IS NOT NULL
+            ORDER BY year, month
+        """)
         rows = cursor.fetchall()
     finally:
         cursor.close()
         conn.close()
-    
-    months: set[Tuple[int, int]] = set()
-    for r in rows:
-        ts = r["date"]
-        if ts is None:
-            continue
-        d = to_local_date(ts)
-        months.add((d.year, d.month))
-    return sorted(months)
+
+    return [(r["year"], r["month"]) for r in rows]
 
 
 @cached(ttl=1800)  # Cache for 30 minutes since guide data changes infrequently

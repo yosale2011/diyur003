@@ -41,6 +41,7 @@ app = FastAPI(title="ניהול משמרות בענן")
 templates = Jinja2Templates(directory=str(config.TEMPLATES_DIR))
 templates.env.filters["human_date"] = human_date
 templates.env.filters["format_currency"] = format_currency
+templates.env.globals["app_version"] = config.VERSION
 
 # Global exception handler for database connection errors
 @app.exception_handler(psycopg2.OperationalError)

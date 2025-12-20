@@ -3,6 +3,8 @@ Home page routes for DiyurCalc application.
 """
 from __future__ import annotations
 
+import time
+import logging
 from datetime import datetime, date
 from typing import Optional
 
@@ -17,6 +19,7 @@ from logic import (
 )
 from utils import month_range_ts, human_date, format_currency
 
+logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory=str(config.TEMPLATES_DIR))
 templates.env.filters["human_date"] = human_date
 templates.env.filters["format_currency"] = format_currency
@@ -29,8 +32,16 @@ def home(
     q: Optional[str] = None
 ) -> HTMLResponse:
     """Home page route showing guides and monthly overview."""
+    func_start_time = time.time()
+    logger.info(f"Starting home for month={month}, year={year}, q={q}")
+
+    guides_start = time.time()
     guides = get_active_guides()
+    logger.info(f"get_active_guides took: {time.time() - guides_start:.4f}s")
+
+    months_start = time.time()
     months_all = available_months_from_db()
+    logger.info(f"available_months_from_db took: {time.time() - months_start:.4f}s")
 
     if months_all:
         if month is None or year is None:
@@ -49,6 +60,7 @@ def home(
         # Convert datetime to date for PostgreSQL date column
         start_date = start_dt.date()
         end_date = end_dt.date()
+        counts_start = time.time()
         with get_conn() as conn:
             for row in conn.execute(
                 """
@@ -60,6 +72,7 @@ def home(
                 (start_date, end_date),
             ):
                 counts[row["person_id"]] = row["cnt"]
+        logger.info(f"Counts query took: {time.time() - counts_start:.4f}s")
 
     # Calculate seniority years for each guide
     reference_date = datetime.now(config.LOCAL_TZ).date()
@@ -97,21 +110,15 @@ def home(
                 if seniority_years < 0:
                     seniority_years = 0
             except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.warning(f"Error calculating seniority for guide {g.get('id')} ({g.get('name')}): {e}, start_date type: {type(g.get('start_date'))}, value: {g.get('start_date')}")
                 seniority_years = None
 
         guide_dict = dict(g)
         guide_dict["seniority_years"] = seniority_years
-        # Debug logging (can be removed later)
-        if seniority_years is not None:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.debug(f"Guide {g.get('name')}: seniority_years = {seniority_years}")
         guides_filtered.append(guide_dict)
 
-    return templates.TemplateResponse(
+    render_start = time.time()
+    response = templates.TemplateResponse(
         "index.html",
         {
             "request": request,
@@ -124,3 +131,10 @@ def home(
             "q": q or "",
         },
     )
+    render_time = time.time() - render_start
+    logger.info(f"Template rendering took: {render_time:.4f}s")
+
+    total_time = time.time() - func_start_time
+    logger.info(f"Total home execution time: {total_time:.4f}s")
+
+    return response

@@ -6,6 +6,16 @@
     @page {
       size: A4;
       margin: 0.5cm;
+      @bottom-center {
+        content: "עמוד " counter(page) " מתוך " counter(pages);
+        font-size: 8pt;
+        color: #666;
+      }
+    }
+
+    /* Page counter for browsers that don't support @page footer */
+    .page-number::after {
+      content: "עמוד " counter(page) " מתוך " counter(pages);
     }
     
     /* Hide navigation and controls */
@@ -431,6 +441,10 @@
 
       <section class="panel panel-chains">
         <div class="print-header" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+            <div style="font-size: 8pt; color: #666;">גרסה {{ app_version }}</div>
+            <div style="font-size: 8pt; color: #666;" class="page-number"></div>
+          </div>
           <h1 style="margin: 0; font-size: 16pt; text-align: center;">דוח פירוט רצפים - {{ person['name'] }}</h1>
           <div style="text-align: center; font-size: 10pt; margin: 4px 0;">חודש: {{ "%02d"|format(selected_month) }}/{{ selected_year }}</div>
         </div>
