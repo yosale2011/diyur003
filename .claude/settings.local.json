@@ -9,7 +9,8 @@
       "Bash(iconv:*)",
       "Bash(chcp 6500)",
       "Bash(git -C \"f:\\\\DiyurClock\\\\105\\\\diyur003\" status:*)",
-      "Bash(del \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\check_shifts.py\")"
+      "Bash(del \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\check_shifts.py\")",
+      "Bash(chcp 65001)"
     ],
     "deny": [],
     "ask": []

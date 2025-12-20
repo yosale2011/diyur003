@@ -434,27 +434,46 @@ def guide_view(
     # Get unique years for dropdown
     years = sorted(set(m["year"] for m in months_options), reverse=True) if months_options else [selected_year]
 
-    # Build simple_summary for "old calculation" tab
+    # Build simple_summary for "old calculation" tab - based on shift_name from reports
+    standby_payment_total = monthly_totals.get('standby_payment', 0) or 0
+    travel_payment = monthly_totals.get('travel', 0) or 0
+    extras_payment = monthly_totals.get('extras', 0) or 0
     simple_summary = {
-        "weekday": {"count": 0, "payment": 0},
-        "friday": {"count": 0, "payment": 0},
-        "saturday": {"count": 0, "payment": 0},
-        "overtime": {"hours": 0, "payment": 0}
+        "night": {"count": 0, "payment": 0},      # משמרת לילה
+        "weekday": {"count": 0, "payment": 0},    # משמרת חול
+        "friday": {"count": 0, "payment": 0},     # משמרת שישי/ערב חג
+        "saturday": {"count": 0, "payment": 0},   # משמרת שבת/חג
+        "hours": {"count": 0, "payment": 0},      # שעת עבודה
+        "standby": {
+            "count": total_standby_count,
+            "payment_per": standby_payment_total / total_standby_count if total_standby_count > 0 else 0,
+            "payment_total": standby_payment_total
+        },
+        "travel": travel_payment,
+        "extras": extras_payment
     }
-    for day in daily_segments:
-        wd = day.get("date_obj").weekday() if day.get("date_obj") else 0
-        day_payment = day.get("payment", 0) or 0
 
-        # Mon(0)-Thu(3), Sun(6) = weekday
-        if wd == 6 or wd <= 3:
-            simple_summary["weekday"]["count"] += 1
-            simple_summary["weekday"]["payment"] += day_payment
-        elif wd == 4:  # Friday
+    # Sum by shift_name from shift_segments (which has the calculated payments)
+    for seg in shift_segments:
+        report = seg.get('report', {})
+        shift_name = report.get('shift_name', '') or ''
+        payment = seg.get('payment', 0) or 0  # Use calculated payment from shift_segments
+
+        if 'לילה' in shift_name:
+            simple_summary["night"]["count"] += 1
+            simple_summary["night"]["payment"] += payment
+        elif 'שישי' in shift_name or 'ערב חג' in shift_name:
             simple_summary["friday"]["count"] += 1
-            simple_summary["friday"]["payment"] += day_payment
-        elif wd == 5:  # Saturday
+            simple_summary["friday"]["payment"] += payment
+        elif ('שבת' in shift_name or 'חג' in shift_name) and 'שישי' not in shift_name and 'ערב' not in shift_name:
             simple_summary["saturday"]["count"] += 1
-            simple_summary["saturday"]["payment"] += day_payment
+            simple_summary["saturday"]["payment"] += payment
+        elif 'שעת עבודה' in shift_name or 'שעה' in shift_name:
+            simple_summary["hours"]["count"] += 1
+            simple_summary["hours"]["payment"] += payment
+        elif 'חול' in shift_name:
+            simple_summary["weekday"]["count"] += 1
+            simple_summary["weekday"]["payment"] += payment
 
     render_start = time.time()
     response = templates.TemplateResponse(

@@ -122,6 +122,17 @@
         </div>
     </div>
 
+    {% if missing_merav_count and missing_merav_count > 0 %}
+    <!-- הודעה על עובדים ללא קוד מירב -->
+    <div style="margin-bottom: 10px; padding: 10px 15px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 18px;">⚠️</span>
+        <span style="font-size: 13px; color: #856404;">
+            יש {{ missing_merav_count }} עובד{% if missing_merav_count > 1 %}ים{% endif %} ללא קוד מירב - לא ייוצאו לגשר.
+        </span>
+        <button onclick="showMissingModal()" style="padding: 4px 10px; font-size: 12px; background: #ffc107; border: none; border-radius: 4px; cursor: pointer;">הצג</button>
+    </div>
+    {% endif %}
+
     {% if preview %}
     <!-- חיפוש ובחירה -->
     <div style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -210,6 +221,29 @@
         <p>לא נמצאו עובדים עם קוד מירב ונתוני שכר לחודש זה.</p>
     </div>
     {% endif %}
+</div>
+
+<!-- Modal עובדים ללא קוד מירב -->
+<div id="missingModal" class="modal-overlay" onclick="if(event.target===this)hideMissingModal()">
+    <div class="modal-content" style="max-width: 400px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0; color: #856404;">עובדים ללא קוד מירב</h3>
+            <button onclick="hideMissingModal()" style="background: none; border: none; font-size: 20px; cursor: pointer;">&times;</button>
+        </div>
+        <p style="font-size: 12px; color: #666; margin-bottom: 15px;">עובדים אלו לא ייוצאו לקובץ גשר. יש להוסיף להם קוד מירב בכרטיס העובד.</p>
+        <table class="legend-table">
+            <tbody>
+                {% for emp in missing_merav_list %}
+                <tr>
+                    <td>
+                        <a href="/guide/{{ emp.id }}?year={{ selected_year }}&month={{ selected_month }}"
+                           style="text-decoration: none; color: #0969da; font-weight: bold;">{{ emp.name }}</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <!-- Modal מקרא סמלים -->
@@ -309,9 +343,20 @@ function hideLegend() {
     document.getElementById('legendModal').classList.remove('show');
 }
 
-// Close modal with Escape key
+function showMissingModal() {
+    document.getElementById('missingModal').classList.add('show');
+}
+
+function hideMissingModal() {
+    document.getElementById('missingModal').classList.remove('show');
+}
+
+// Close modals with Escape key
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') hideLegend();
+    if (e.key === 'Escape') {
+        hideLegend();
+        hideMissingModal();
+    }
 });
 </script>
 {% endblock %}

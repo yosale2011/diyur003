@@ -109,6 +109,8 @@ def export_gesher_preview(
 
     show_zero_flag = show_zero == "1"
 
+    from logic import calculate_monthly_summary
+
     with get_conn() as conn:
         preview = gesher_exporter.get_export_preview(conn, year, month, limit=100)
         export_codes = gesher_exporter.load_export_config_from_db(conn)
@@ -116,6 +118,20 @@ def export_gesher_preview(
             export_codes = gesher_exporter.load_export_config()
         # שליפת מפעלים מהטבלה
         employers = conn.execute("SELECT code, name FROM employers WHERE is_active::integer = 1 ORDER BY code").fetchall()
+
+        # מציאת מדריכים ללא קוד מירב - רק אלו שיש להם נתונים בחודש הנבחר
+        raw_conn = conn.conn if hasattr(conn, 'conn') else conn
+        summary_data, _ = calculate_monthly_summary(raw_conn, year, month)
+
+    missing_merav_list = []
+    for person_data in summary_data:
+        meirav_code = person_data.get('merav_code') or person_data.get('meirav_code')
+        if not meirav_code:
+            missing_merav_list.append({
+                'id': person_data.get('person_id') or person_data.get('id'),
+                'name': person_data.get('name', '')
+            })
+    missing_merav_count = len(missing_merav_list)
 
     # אם לא מבקשים להציג ערכים 0, מסננים שורות ועובדים ללא נתונים
     if not show_zero_flag:
@@ -143,7 +159,9 @@ def export_gesher_preview(
         "selected_year": year,
         "selected_month": month,
         "show_zero": show_zero_flag,
-        "years": list(range(2023, 2027))
+        "years": list(range(2023, 2027)),
+        "missing_merav_count": missing_merav_count,
+        "missing_merav_list": missing_merav_list
     })
 
 

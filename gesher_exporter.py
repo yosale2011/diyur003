@@ -406,7 +406,7 @@ def generate_gesher_file(conn, year: int, month: int, filter_name: str = None, c
     # בניית מיפוי person_id -> totals
     totals_by_id = {}
     for person_data in summary_data:
-        pid = person_data.get('id')
+        pid = person_data.get('person_id') or person_data.get('id')
         if pid:
             totals_by_id[pid] = person_data.get('totals', {})
 
