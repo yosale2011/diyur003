@@ -9,7 +9,7 @@ from convertdate import hebrew
 
 # Import utilities and config
 from config import config
-from cache_manager import cached
+from cache_manager import cached, cache
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -122,25 +122,69 @@ def to_local_date(ts: int | datetime | date) -> date:
     return datetime.fromtimestamp(ts, LOCAL_TZ).date()
 
 
+SHABBAT_CACHE_KEY = "shabbat_times_cache"
+SHABBAT_CACHE_TTL = 86400  # 24 hours
+
 def get_shabbat_times_cache(conn) -> Dict[str, Dict[str, str]]:
     """
-    Load Shabbat times from DB into a dictionary.
+    Load Shabbat times from DB into a dictionary with 24-hour caching.
     Key: Date string (YYYY-MM-DD) representing Friday.
     Value: {'enter': HH:MM, 'exit': HH:MM}
     """
+    # Check cache first
+    cached_result = cache.get(SHABBAT_CACHE_KEY)
+    if cached_result is not None:
+        return cached_result
+
     try:
         cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         cursor.execute("SELECT shabbat_date, candle_lighting, havdalah FROM shabbat_times")
         rows = cursor.fetchall()
-        cache = {}
+        result = {}
         for r in rows:
             if r["shabbat_date"] and r["candle_lighting"] and r["havdalah"]:
-                cache[r["shabbat_date"]] = {"enter": r["candle_lighting"], "exit": r["havdalah"]}
+                result[r["shabbat_date"]] = {"enter": r["candle_lighting"], "exit": r["havdalah"]}
         cursor.close()
-        return cache
+
+        # Store in cache
+        cache.set(SHABBAT_CACHE_KEY, result, SHABBAT_CACHE_TTL)
+        return result
     except Exception as e:
         logger.warning(f"Failed to load shabbat times cache: {e}")
         return {}
+
+
+MINIMUM_WAGE_CACHE_KEY = "minimum_wage_cache"
+MINIMUM_WAGE_CACHE_TTL = 86400  # 24 hours
+DEFAULT_MINIMUM_WAGE = 34.40
+
+def get_minimum_wage(conn) -> float:
+    """
+    Get current minimum wage rate from DB with 24-hour caching.
+    Returns hourly rate in shekels.
+    """
+    # Check cache first
+    cached_result = cache.get(MINIMUM_WAGE_CACHE_KEY)
+    if cached_result is not None:
+        return cached_result
+
+    try:
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cursor.execute("SELECT hourly_rate FROM minimum_wage_rates ORDER BY effective_from DESC LIMIT 1")
+        row = cursor.fetchone()
+        cursor.close()
+
+        if row and row["hourly_rate"]:
+            result = float(row["hourly_rate"]) / 100  # Convert from agorot to shekels
+        else:
+            result = DEFAULT_MINIMUM_WAGE
+
+        # Store in cache
+        cache.set(MINIMUM_WAGE_CACHE_KEY, result, MINIMUM_WAGE_CACHE_TTL)
+        return result
+    except Exception as e:
+        logger.warning(f"Failed to get minimum wage, using default: {e}")
+        return DEFAULT_MINIMUM_WAGE
 
 
 def get_standby_rate(conn, segment_id: int, apartment_type_id: int | None, is_married: bool) -> float:
@@ -962,6 +1006,11 @@ def _process_daily_map(
 
         all_events.sort(key=lambda x: x["start"])
 
+        # Build a set of work segment boundaries for quick lookup
+        # This helps determine if standby truly breaks the chain or if work continues through it
+        work_starts = {ws[0] for ws in work_segments}  # All work start times
+        work_ends = {ws[1] for ws in work_segments}    # All work end times
+
         # Determine if we should use carryover from previous day
         # Carryover applies if first work event starts at 08:00 (480 minutes)
         first_work_start = None
@@ -1026,7 +1075,14 @@ def _process_daily_map(
             should_break = False
             if current_chain_segments:
                 if is_special:
-                    should_break = True
+                    # כוננות/חופשה שוברת רצף רק אם אין עבודה שממשיכה אחריה
+                    # אם יש עבודה שמתחילה בדיוק כשהכוננות נגמרת, הרצף נמשך
+                    work_continues_after = seg_end in work_starts
+                    if work_continues_after:
+                        # יש עבודה שמתחילה כשהכוננות נגמרת - לא לשבור רצף
+                        should_break = False
+                    else:
+                        should_break = True
                 elif last_end is not None:
                     # Calculate gap considering normalized times
                     # If seg_start is less than WORK_DAY_CUTOFF (480), it's from previous day and normalized

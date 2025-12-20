@@ -15,6 +15,7 @@ from database import get_conn
 from logic import (
     DEFAULT_MINIMUM_WAGE,
     get_shabbat_times_cache,
+    get_minimum_wage,
     get_payment_codes,
     get_available_months_for_person,
     calculate_person_monthly_totals,
@@ -41,15 +42,8 @@ def simple_summary_view(
             now = datetime.now(config.LOCAL_TZ)
             year, month = now.year, now.month
 
-        # Minimum Wage
-        try:
-            row = conn.execute("SELECT hourly_rate FROM minimum_wage_rates ORDER BY effective_from DESC LIMIT 1").fetchone()
-            minimum_wage = (float(row["hourly_rate"]) / 100) if row else DEFAULT_MINIMUM_WAGE
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Failed to get minimum wage from DB, using default: {e}")
-            minimum_wage = DEFAULT_MINIMUM_WAGE
+        # Minimum Wage (cached)
+        minimum_wage = get_minimum_wage(conn.conn)
 
         shabbat_cache = get_shabbat_times_cache(conn.conn)
 
@@ -130,16 +124,8 @@ def guide_view(
 ) -> HTMLResponse:
     """Detailed guide view with full monthly report."""
     with get_conn() as conn:
-        # שליפת שכר מינימום מה-DB
-        MINIMUM_WAGE = 34.40
-        try:
-            row = conn.execute("SELECT hourly_rate FROM minimum_wage_rates ORDER BY effective_from DESC LIMIT 1").fetchone()
-            if row and row["hourly_rate"]:
-                MINIMUM_WAGE = float(row["hourly_rate"]) / 100
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Error fetching minimum wage: {e}")
+        # שליפת שכר מינימום מה-DB (cached)
+        MINIMUM_WAGE = get_minimum_wage(conn.conn)
 
         person = conn.execute(
             "SELECT id, name, phone, email, type, is_active, start_date FROM people WHERE id = %s",
@@ -227,25 +213,33 @@ def guide_view(
                 ORDER BY tr.date, tr.start_time
             """, (person_id, start_date, end_date)).fetchall()
 
+            # Pre-load all shift segments in one query (avoid N+1)
+            shift_type_ids = {r['shift_type_id'] for r in month_reports if r['shift_type_id']}
+            segments_by_shift = {}
+            if shift_type_ids:
+                placeholders = ",".join(["%s"] * len(shift_type_ids))
+                cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                cursor.execute(f"""
+                    SELECT shift_type_id, start_time, end_time, wage_percent, segment_type
+                    FROM shift_time_segments
+                    WHERE shift_type_id IN ({placeholders})
+                    ORDER BY order_index
+                """, tuple(shift_type_ids))
+                for seg in cursor.fetchall():
+                    segments_by_shift.setdefault(seg['shift_type_id'], []).append(seg)
+                cursor.close()
+
             # Get shift segments with payment calculation
             shift_segments = []
             for report in month_reports:
                 # Calculate payment for this specific shift
                 shift_payment = 0.0
                 shift_standby_payment = 0.0
-                
+
                 if report['shift_type_id']:
-                    # Get segments for this shift type
-                    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-                    cursor.execute("""
-                        SELECT start_time, end_time, wage_percent, segment_type
-                        FROM shift_time_segments
-                        WHERE shift_type_id = %s
-                        ORDER BY order_index
-                    """, (report['shift_type_id'],))
-                    segments = cursor.fetchall()
-                    cursor.close()
-                    
+                    # Get segments from pre-loaded cache
+                    segments = segments_by_shift.get(report['shift_type_id'], [])
+
                     # Calculate payment based on segments
                     for seg in segments:
                         # Convert time strings to minutes
