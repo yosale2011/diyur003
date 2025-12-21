@@ -381,59 +381,84 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                     entry["segments"].append((eff_start, eff_end, effective_seg_type, label, r["shift_type_id"], segment_id, apartment_type_id, is_married, apartment_name, p_date))
                     
                 # Uncovered minutes -> work
+                # חישוב שעות עבודה שלא מכוסות ע"י סגמנטים מוגדרים
                 total_part_minutes = s_end - s_start
                 remaining = total_part_minutes - minutes_covered
+
                 if remaining > 0:
-                    entry["buckets"].setdefault("שעות עבודה", 0)
-                    entry["buckets"]["שעות עבודה"] += remaining
+                    # יצירת רשימה של כל הזמנים המכוסים ע"י סגמנטים
+                    # ואז מציאת ה"חורים" - הזמנים שלא מכוסים
+                    covered_intervals = []
 
-                    # Check if there's uncovered time BEFORE the first segment
-                    # This happens when report starts before first defined segment (e.g., 15:00 vs 16:00)
-                    if seg_list_ordered:
-                        first_seg = seg_list_ordered[0]
-                        first_seg_start_raw, _ = span_minutes(first_seg["start_time"], first_seg["end_time"])
+                    # איסוף כל האינטרוולים המכוסים
+                    last_s_end_norm_2 = -1
+                    for seg in seg_list_ordered:
+                        orig_s_start_2, orig_s_end_2 = span_minutes(seg["start_time"], seg["end_time"])
 
-                        # The first segment has been normalized in the loop above
-                        # We need to find where it actually starts in the current timeline
-                        # For the first segment, it starts at first_seg_start_raw (no normalization yet)
-                        first_seg_start_in_timeline = first_seg_start_raw
+                        if last_s_end_norm_2 != -1:
+                            while orig_s_start_2 < last_s_end_norm_2:
+                                orig_s_start_2 += MINUTES_PER_DAY
+                                orig_s_end_2 += MINUTES_PER_DAY
+                        last_s_end_norm_2 = orig_s_end_2
 
-                        # Adjust for second day scenarios
                         if is_second_day:
-                            first_seg_start_in_timeline -= MINUTES_PER_DAY
+                            current_seg_start_2 = orig_s_start_2 - MINUTES_PER_DAY
+                            current_seg_end_2 = orig_s_end_2 - MINUTES_PER_DAY
+                        else:
+                            current_seg_start_2 = orig_s_start_2
+                            current_seg_end_2 = orig_s_end_2
 
-                        # Check if report part starts before first segment
-                        if s_start < first_seg_start_in_timeline and s_start + remaining > s_start:
-                            # Calculate uncovered time before first segment
-                            uncovered_before = min(first_seg_start_in_timeline - s_start, remaining)
+                        # חישוב החפיפה בין הדיווח לסגמנט
+                        inter_start = max(s_start, current_seg_start_2)
+                        inter_end = min(s_end, current_seg_end_2)
+                        if inter_start < inter_end:
+                            covered_intervals.append((inter_start, inter_end))
 
-                            if uncovered_before > 0:
-                                # Add this time as a work segment for payment
-                                segment_id = None
-                                apartment_type_id = r.get("apartment_type_id")
-                                is_married = r.get("is_married")
-                                apartment_name = r.get("apartment_name", "")
+                    # מיון ומיזוג אינטרוולים חופפים
+                    covered_intervals.sort()
+                    merged_covered = []
+                    for interval in covered_intervals:
+                        if merged_covered and interval[0] <= merged_covered[-1][1]:
+                            merged_covered[-1] = (merged_covered[-1][0], max(merged_covered[-1][1], interval[1]))
+                        else:
+                            merged_covered.append(interval)
 
-                                uncovered_start = s_start
-                                uncovered_end = s_start + uncovered_before
+                    # מציאת ה"חורים" - זמנים לא מכוסים
+                    uncovered_intervals = []
+                    current_pos = s_start
+                    for cov_start, cov_end in merged_covered:
+                        if current_pos < cov_start:
+                            uncovered_intervals.append((current_pos, cov_start))
+                        current_pos = max(current_pos, cov_end)
+                    if current_pos < s_end:
+                        uncovered_intervals.append((current_pos, s_end))
 
-                                # Apply same normalization as other segments
-                                if s_end <= CUTOFF:
-                                    eff_uncovered_start = uncovered_start + MINUTES_PER_DAY
-                                    eff_uncovered_end = uncovered_end + MINUTES_PER_DAY
-                                else:
-                                    eff_uncovered_start = uncovered_start
-                                    eff_uncovered_end = uncovered_end
+                    # יצירת סגמנטי עבודה לכל זמן לא מכוסה
+                    segment_id = None
+                    apartment_type_id = r.get("apartment_type_id")
+                    is_married = r.get("is_married")
+                    apartment_name = r.get("apartment_name", "")
 
-                                # Add as work segment with 100% wage
-                                entry["segments"].append((eff_uncovered_start, eff_uncovered_end, "work", "100%", r["shift_type_id"], segment_id, apartment_type_id, is_married, apartment_name, p_date))
+                    for uncov_start, uncov_end in uncovered_intervals:
+                        uncov_duration = uncov_end - uncov_start
+                        if uncov_duration <= 0:
+                            continue
 
-                                # Also update buckets: move from "שעות עבודה" to "100%"
-                                entry["buckets"]["שעות עבודה"] -= uncovered_before
-                                if entry["buckets"]["שעות עבודה"] <= 0:
-                                    del entry["buckets"]["שעות עבודה"]
-                                entry["buckets"].setdefault("100%", 0)
-                                entry["buckets"]["100%"] += uncovered_before
+                        # נרמול זמנים לפי יום עבודה
+                        if s_end <= CUTOFF:
+                            eff_uncov_start = uncov_start + MINUTES_PER_DAY
+                            eff_uncov_end = uncov_end + MINUTES_PER_DAY
+                        else:
+                            eff_uncov_start = uncov_start
+                            eff_uncov_end = uncov_end
+
+                        # הוספת סגמנט עבודה - האחוז יחושב ע"י מנגנון הרצפים
+                        entry["segments"].append((
+                            eff_uncov_start, eff_uncov_end, "work", "work",
+                            r["shift_type_id"], segment_id,
+                            apartment_type_id, is_married,
+                            apartment_name, p_date
+                        ))
 
     # Process Daily Segments
     daily_segments = []
