@@ -56,19 +56,21 @@
         <table id="summaryTable" style="width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px;">
             <thead style="position: sticky; top: 0; z-index: 10;">
                 <tr style="background: #f2f4f7; font-size: 11px;">
-                    <th onclick="sortTable(0)" style="cursor: pointer; position: sticky; right: 0; top: 0; background: #f2f4f7; z-index: 12; border-left: 2px solid #ddd; padding: 4px 6px; white-space: nowrap; width: 180px;">שם ⇅</th>
-                    <th onclick="sortTable(1)" style="cursor: pointer; padding: 2px 4px; width: 50px; text-align: right;" title="שעות רגילות 100%">100%<div style="font-size: 9px; color: #888;">360</div></th>
-                    <th onclick="sortTable(2)" style="cursor: pointer; padding: 2px 4px; width: 50px; text-align: right;" title="שעות נוספות 125%">125%<div style="font-size: 9px; color: #888;">366</div></th>
-                    <th onclick="sortTable(3)" style="cursor: pointer; padding: 2px 4px; width: 50px; text-align: right;" title="שעות נוספות 150%">150%<div style="font-size: 9px; color: #888;">368</div></th>
-                    <th onclick="sortTable(4)" style="cursor: pointer; padding: 2px 4px; background: #e8f5e9; width: 55px; text-align: right;" title="שבת 150%">🕯️150<div style="font-size: 9px; color: #888;">130</div></th>
-                    <th onclick="sortTable(5)" style="cursor: pointer; padding: 2px 4px; background: #e8f5e9; width: 50px; text-align: right;" title="שבת 175%">175<div style="font-size: 9px; color: #888;">382</div></th>
-                    <th onclick="sortTable(6)" style="cursor: pointer; padding: 2px 4px; background: #e8f5e9; width: 50px; text-align: right;" title="שבת 200%">200<div style="font-size: 9px; color: #888;">434</div></th>
-                    <th onclick="sortTable(7)" style="cursor: pointer; padding: 2px 4px; width: 60px; text-align: right;" title="שעות בתעריף משתנה">משתנה<div style="font-size: 9px; color: #888;">363</div></th>
-                    <th onclick="sortTable(8)" style="cursor: pointer; padding: 2px 4px; width: 50px; text-align: right;" title="ימי עבודה">ימים<div style="font-size: 9px; color: #888;">767</div></th>
-                    <th onclick="sortTable(9)" style="cursor: pointer; padding: 2px 4px; width: 55px; text-align: right;" title="סה״כ שעות">סהכ<div style="font-size: 9px; color: #888;">199</div></th>
-                    <th onclick="sortTable(10)" style="cursor: pointer; padding: 2px 4px; width: 60px; text-align: right;" title="חופשה">חופשה<div style="font-size: 9px; color: #888;">376</div></th>
-                    <th onclick="sortTable(11)" style="cursor: pointer; padding: 2px 4px; background: #dbeafe; width: 65px; text-align: right;" title="כוננויות">כוננות<div style="font-size: 9px; color: #888;">{{ ns.standby }}</div></th>
-                    <th onclick="sortTable(12)" style="cursor: pointer; padding: 2px 4px; background: #e7f5ff; font-weight: bold; width: 80px; text-align: right;">סה"כ</th>
+                    <th onclick="sortTable(0)" style="cursor: pointer; position: sticky; right: 0; top: 0; background: #f2f4f7; z-index: 12; border-left: 2px solid #ddd; padding: 4px 6px; white-space: nowrap; width: 160px;">שם ⇅</th>
+                    <th onclick="sortTable(1)" style="cursor: pointer; padding: 2px 4px; width: 45px; text-align: right;" title="שעות רגילות 100%">100%<div style="font-size: 9px; color: #888;">360</div></th>
+                    <th onclick="sortTable(2)" style="cursor: pointer; padding: 2px 4px; width: 45px; text-align: right;" title="שעות נוספות 125%">125%<div style="font-size: 9px; color: #888;">366</div></th>
+                    <th onclick="sortTable(3)" style="cursor: pointer; padding: 2px 4px; width: 45px; text-align: right;" title="שעות נוספות 150%">150%<div style="font-size: 9px; color: #888;">368</div></th>
+                    <th onclick="sortTable(4)" style="cursor: pointer; padding: 2px 4px; background: #e8f5e9; width: 50px; text-align: right;" title="שבת 150%">🕯️150<div style="font-size: 9px; color: #888;">130</div></th>
+                    <th onclick="sortTable(5)" style="cursor: pointer; padding: 2px 4px; background: #e8f5e9; width: 45px; text-align: right;" title="שבת 175%">175<div style="font-size: 9px; color: #888;">382</div></th>
+                    <th onclick="sortTable(6)" style="cursor: pointer; padding: 2px 4px; background: #e8f5e9; width: 45px; text-align: right;" title="שבת 200%">200<div style="font-size: 9px; color: #888;">434</div></th>
+                    <th onclick="sortTable(7)" style="cursor: pointer; padding: 2px 4px; width: 55px; text-align: right;" title="שעות בתעריף משתנה">משתנה<div style="font-size: 9px; color: #888;">363</div></th>
+                    <th onclick="sortTable(8)" style="cursor: pointer; padding: 2px 4px; width: 40px; text-align: right;" title="ימי עבודה">ימים<div style="font-size: 9px; color: #888;">767</div></th>
+                    <th onclick="sortTable(9)" style="cursor: pointer; padding: 2px 4px; width: 45px; text-align: right;" title="סה״כ שעות">סהכ<div style="font-size: 9px; color: #888;">199</div></th>
+                    <th onclick="sortTable(10)" style="cursor: pointer; padding: 2px 4px; width: 50px; text-align: right;" title="חופשה">חופשה<div style="font-size: 9px; color: #888;">376</div></th>
+                    <th onclick="sortTable(11)" style="cursor: pointer; padding: 2px 4px; background: #dbeafe; width: 55px; text-align: right;" title="כוננויות">כוננויות<div style="font-size: 9px; color: #888;">{{ ns.standby }}</div></th>
+                    <th onclick="sortTable(12)" style="cursor: pointer; padding: 2px 4px; background: #fef3c7; width: 55px; text-align: right;" title="נסיעות">נסיעות<div style="font-size: 9px; color: #888;">{{ ns.travel }}</div></th>
+                    <th onclick="sortTable(13)" style="cursor: pointer; padding: 2px 4px; background: #f3e8ff; width: 55px; text-align: right;" title="תוספות">תוספות<div style="font-size: 9px; color: #888;">{{ ns.extras }}</div></th>
+                    <th onclick="sortTable(14)" style="cursor: pointer; padding: 2px 4px; background: #e7f5ff; font-weight: bold; width: 70px; text-align: right;">סה"כ</th>
                 </tr>
             </thead>
             <tbody>
@@ -86,8 +88,10 @@
                     <td style="text-align: right; padding: 2px;">{% set v = row.totals.calc_variable or 0 %}{% if v > 0 %}{{ (v|float/60)|round(1) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
                     <td style="text-align: right; padding: 2px;">{% set v = row.totals.actual_work_days or 0 %}{% if v > 0 %}{{ v }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
                     <td style="text-align: right; padding: 2px;">{% set v = row.totals.total_hours or 0 %}{% if v > 0 %}{{ (v|float/60)|round(1) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
-                    <td style="text-align: right; padding: 2px;">{% set v = row.totals.vacation_payment or 0 %}{% if v > 0 %}{{ "%.0f"|format(v) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: right; padding: 2px;">{% set v = row.totals.vacation_minutes or 0 %}{% if v > 0 %}{{ (v|float/60)|round(1) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
                     <td style="text-align: right; padding: 2px; background: #eff6ff;">{% if row.totals.standby_payment and row.totals.standby_payment > 0 %}{{ "%.0f"|format(row.totals.standby_payment) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: right; padding: 2px; background: #fef3c7;">{% if row.totals.travel and row.totals.travel > 0 %}{{ "%.0f"|format(row.totals.travel) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
+                    <td style="text-align: right; padding: 2px; background: #f3e8ff;">{% if row.totals.extras and row.totals.extras > 0 %}{{ "%.0f"|format(row.totals.extras) }}{% else %}<span style="color:#ddd;">-</span>{% endif %}</td>
                     <td style="background: #e7f5ff; font-weight: bold; padding: 2px; text-align: right;">{{ "{:,.0f}".format((row.totals.total_payment or row.totals.payment or 0)) }}</td>
                 </tr>
                 {% endfor %}
@@ -104,8 +108,10 @@
                     <td style="text-align: right; padding: 2px;">{% set v = grand_totals.calc_variable or 0 %}{% if v > 0 %}{{ (v|float/60)|round(0) }}{% endif %}</td>
                     <td style="text-align: right; padding: 2px;">{% set v = grand_totals.actual_work_days or 0 %}{% if v > 0 %}{{ v }}{% endif %}</td>
                     <td style="text-align: right; padding: 2px;">{% set v = grand_totals.total_hours or 0 %}{% if v > 0 %}{{ (v|float/60)|round(0) }}{% endif %}</td>
-                    <td style="text-align: right; padding: 2px;">{% set v = grand_totals.vacation_payment or 0 %}{% if v > 0 %}{{ "%.0f"|format(v) }}{% endif %}</td>
+                    <td style="text-align: right; padding: 2px;">{% set v = grand_totals.vacation_minutes or 0 %}{% if v > 0 %}{{ (v|float/60)|round(0) }}{% endif %}</td>
                     <td style="text-align: right; padding: 2px; background: #1e40af;">{% if grand_totals.standby_payment and grand_totals.standby_payment > 0 %}{{ "%.0f"|format(grand_totals.standby_payment) }}{% endif %}</td>
+                    <td style="text-align: right; padding: 2px; background: #92400e;">{% if grand_totals.travel and grand_totals.travel > 0 %}{{ "%.0f"|format(grand_totals.travel) }}{% endif %}</td>
+                    <td style="text-align: right; padding: 2px; background: #6b21a8;">{% if grand_totals.extras and grand_totals.extras > 0 %}{{ "%.0f"|format(grand_totals.extras) }}{% endif %}</td>
                     <td style="background: #444; padding: 2px; text-align: right;">{{ "{:,.0f}".format(grand_totals.payment or 0) }}</td>
                 </tr>
             </tbody>
