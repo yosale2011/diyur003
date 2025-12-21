@@ -36,7 +36,7 @@ python app.py
 3. חבר את ה-repository שלך (GitHub/GitLab)
 4. הגדר:
    - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `uvicorn app:app --host 0.0.0.0 --port $PORT`
+   - **Start Command:** `python -m uvicorn app:app --host 0.0.0.0 --port 8000`
 5. לחץ על "Create Web Service"
 
 ### אפשרות 3: Fly.io

@@ -226,27 +226,41 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                 
                 # Sort segments chronologically by start time
                 seg_list_sorted = sorted(seg_list, key=lambda s: span_minutes(s["start_time"], s["end_time"])[0])
-                
+
                 # Rotate the list so that the segment corresponding to the report start time comes first
                 # This ensures that normalization flows correctly (e.g. 06:30-08:00 is end of shift, not start)
                 rotate_idx = 0
                 rep_start_min = rep_start_orig % MINUTES_PER_DAY
-                
+
                 # Find the segment that starts closest to (and before/at) the report start time
                 best_start_diff = -1
-                
+
+                # Define threshold for morning segments: segments before 08:00 might be "next day" segments
+                MORNING_CUTOFF = 480  # 08:00
+
                 for i, seg in enumerate(seg_list_sorted):
                     seg_start_min, _ = span_minutes(seg["start_time"], seg["end_time"])
+
+                    # Fix for bug: When report starts in afternoon (e.g. 15:00) and a segment starts
+                    # in early morning (e.g. 06:30), that segment is likely NEXT DAY, not before report.
+                    # This prevents treating 06:30-08:00 as the first segment for a 15:00-08:00 report.
+                    is_morning_segment = seg_start_min < MORNING_CUTOFF
+                    is_afternoon_report = rep_start_min >= 720  # 12:00
+
+                    if is_morning_segment and is_afternoon_report:
+                        # Skip this morning segment - it's next day, not before the report
+                        continue
+
                     if seg_start_min <= rep_start_min:
                         if seg_start_min > best_start_diff:
                             best_start_diff = seg_start_min
                             rotate_idx = i
                     elif best_start_diff == -1:
-                        # If we haven't found any starting before, and this is the first one, 
+                        # If we haven't found any starting before, and this is the first one,
                         # checking implies we might need to wrap around.
                         # But we continue to see if there are others.
                         pass
-                
+
                 # If no segment starts before report time:
                 # - If report starts BEFORE the first segment of the shift definition,
                 #   keep rotate_idx=0 (start from the first segment)
@@ -256,16 +270,29 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                 # the 08:00-12:00 gap is just waiting time, so start from segment 0
                 if best_start_diff == -1 and seg_list_sorted:
                     first_seg_start, _ = span_minutes(seg_list_sorted[0]["start_time"], seg_list_sorted[0]["end_time"])
-                    last_seg_start, last_seg_end = span_minutes(seg_list_sorted[-1]["start_time"], seg_list_sorted[-1]["end_time"])
 
-                    # If report starts before first segment, use first segment
-                    if rep_start_min < first_seg_start:
-                        rotate_idx = 0
-                    # If report starts late (e.g. 05:00 when last segment is 22:00-08:00),
-                    # it belongs to the last segment (wrapping from yesterday)
+                    # For afternoon reports, find first non-morning segment
+                    if rep_start_min >= 720:  # Report is in afternoon/evening
+                        first_afternoon_idx = None
+                        for i, seg in enumerate(seg_list_sorted):
+                            seg_start_min, _ = span_minutes(seg["start_time"], seg["end_time"])
+                            if seg_start_min >= MORNING_CUTOFF:
+                                first_afternoon_idx = i
+                                break
+
+                        if first_afternoon_idx is not None:
+                            rotate_idx = first_afternoon_idx
+                        else:
+                            # All segments are morning - unusual case, use first
+                            rotate_idx = 0
                     else:
-                        rotate_idx = len(seg_list_sorted) - 1
-                
+                        # Report is in morning/early hours, use standard logic
+                        if rep_start_min < first_seg_start:
+                            rotate_idx = 0
+                        else:
+                            # Report starts late in morning (e.g. 05:00)
+                            rotate_idx = len(seg_list_sorted) - 1
+
                 seg_list_ordered = seg_list_sorted[rotate_idx:] + seg_list_sorted[:rotate_idx]
                 
                 # Normalize segments from shift definition to be continuous
@@ -359,6 +386,47 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                 if remaining > 0:
                     entry["buckets"].setdefault("שעות עבודה", 0)
                     entry["buckets"]["שעות עבודה"] += remaining
+
+                    # Check if there's uncovered time BEFORE the first segment
+                    # This happens when report starts before first defined segment (e.g., 15:00 vs 16:00)
+                    if seg_list_ordered:
+                        first_seg = seg_list_ordered[0]
+                        first_seg_start_raw, _ = span_minutes(first_seg["start_time"], first_seg["end_time"])
+
+                        # The first segment has been normalized in the loop above
+                        # We need to find where it actually starts in the current timeline
+                        # For the first segment, it starts at first_seg_start_raw (no normalization yet)
+                        first_seg_start_in_timeline = first_seg_start_raw
+
+                        # Adjust for second day scenarios
+                        if is_second_day:
+                            first_seg_start_in_timeline -= MINUTES_PER_DAY
+
+                        # Check if report part starts before first segment
+                        if s_start < first_seg_start_in_timeline and s_start + remaining > s_start:
+                            # Calculate uncovered time before first segment
+                            uncovered_before = min(first_seg_start_in_timeline - s_start, remaining)
+
+                            if uncovered_before > 0:
+                                # Add this time as a work segment for payment
+                                segment_id = None
+                                apartment_type_id = r.get("apartment_type_id")
+                                is_married = r.get("is_married")
+                                apartment_name = r.get("apartment_name", "")
+
+                                uncovered_start = s_start
+                                uncovered_end = s_start + uncovered_before
+
+                                # Apply same normalization as other segments
+                                if s_end <= CUTOFF:
+                                    eff_uncovered_start = uncovered_start + MINUTES_PER_DAY
+                                    eff_uncovered_end = uncovered_end + MINUTES_PER_DAY
+                                else:
+                                    eff_uncovered_start = uncovered_start
+                                    eff_uncovered_end = uncovered_end
+
+                                # Add as work segment with 100% wage
+                                entry["segments"].append((eff_uncovered_start, eff_uncovered_end, "work", "100%", r["shift_type_id"], segment_id, apartment_type_id, is_married, apartment_name, p_date))
 
     # Process Daily Segments
     daily_segments = []

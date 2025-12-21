@@ -291,7 +291,8 @@ function selectAll(checked) {
 
 function exportSelected() {
     const selected = [];
-    document.querySelectorAll('.person-checkbox:checked').forEach(cb => {
+    // רק checkboxes של שורות גלויות (לא מוסתרות)
+    document.querySelectorAll('.qty-row:not(.hidden) .person-checkbox:checked').forEach(cb => {
         selected.push(cb.value);
     });
 
@@ -301,9 +302,12 @@ function exportSelected() {
     }
 
     // ייצוא כל עובד שנבחר (פותח הורדות מרובות)
-    selected.forEach(personId => {
-        const url = `/export/gesher/person/${personId}?year={{ selected_year }}&month={{ selected_month }}`;
-        window.open(url, '_blank');
+    // פתיחה עם delay קטן כדי למנוע חסימת popup blocker
+    selected.forEach((personId, index) => {
+        setTimeout(() => {
+            const url = `/export/gesher/person/${personId}?year={{ selected_year }}&month={{ selected_month }}`;
+            window.open(url, '_blank');
+        }, index * 100);
     });
 }
 
