@@ -145,6 +145,7 @@ def export_gesher_preview(
             ]
             if non_zero_lines:
                 filtered_preview.append({
+                    'person_id': person['person_id'],
                     'name': person['name'],
                     'meirav_code': person['meirav_code'],
                     'lines': non_zero_lines
