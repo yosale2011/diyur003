@@ -132,9 +132,71 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
         is_sick_report = ("מחלה" in shift_name_str)
         is_vacation_report = ("חופשה" in shift_name_str)
 
-        # משמרות תגבור - משתמשים בסגמנטים המוגדרים ישירות (לא לפי שעות דיווח)
-        # רק משמרות עם "תגבור" בשם מקבלות התייחסות מיוחדת זו
-        is_fixed_segments_shift = "תגבור" in shift_name_str
+        # משמרות עם סגמנטים קבועים - משתמשים בסגמנטים המוגדרים ישירות (לא לפי שעות דיווח)
+        # כולל: משמרות תגבור, יום חופשה, יום מחלה
+        is_fixed_segments_shift = "תגבור" in shift_name_str or is_vacation_report or is_sick_report
+
+        # משמרת לילה - סגמנטים דינמיים לפי זמן הכניסה בפועל
+        # החוק: 2 שעות ראשונות עבודה, עד 06:30 כוננות, 06:30-08:00 עבודה
+        is_night_shift = (shift_name_str == "משמרת לילה")
+        if is_night_shift:
+            # יצירת סגמנטים דינמיים לפי זמן הכניסה בפועל
+            entry_time = rep_start_orig  # זמן הכניסה בדקות
+            exit_time = rep_end_orig if rep_end_orig > entry_time else rep_end_orig + MINUTES_PER_DAY
+
+            WORK_FIRST_HOURS = 120  # 2 שעות ראשונות = עבודה
+            STANDBY_END = 390  # 06:30 = 390 דקות
+            MORNING_WORK_START = 390  # 06:30
+            MORNING_WORK_END = 480  # 08:00
+
+            # חישוב הסגמנטים הדינמיים
+            dynamic_segments = []
+
+            # סגמנט 1: 2 שעות ראשונות עבודה
+            work1_start = entry_time
+            work1_end = min(entry_time + WORK_FIRST_HOURS, exit_time)
+            if work1_end > work1_start:
+                dynamic_segments.append({
+                    "start_time": f"{(work1_start // 60) % 24:02d}:{work1_start % 60:02d}",
+                    "end_time": f"{(work1_end // 60) % 24:02d}:{work1_end % 60:02d}",
+                    "wage_percent": 100,
+                    "segment_type": "work",
+                    "id": None
+                })
+
+            # סגמנט 2: כוננות מסוף 2 שעות עבודה עד 06:30
+            standby_start = work1_end
+            # 06:30 - אם הכניסה אחרי חצות, 06:30 הוא באותו יום; אחרת ביום הבא
+            standby_end_time = STANDBY_END if entry_time < MINUTES_PER_DAY else STANDBY_END + MINUTES_PER_DAY
+            if entry_time >= 720:  # אם נכנס אחרי 12:00, 06:30 הוא למחרת
+                standby_end_time = STANDBY_END + MINUTES_PER_DAY
+            standby_end = min(standby_end_time, exit_time)
+            if standby_end > standby_start:
+                dynamic_segments.append({
+                    "start_time": f"{(standby_start // 60) % 24:02d}:{standby_start % 60:02d}",
+                    "end_time": f"{(standby_end // 60) % 24:02d}:{standby_end % 60:02d}",
+                    "wage_percent": 24,
+                    "segment_type": "standby",
+                    "id": None
+                })
+
+            # סגמנט 3: עבודה 06:30-08:00
+            morning_start = standby_end_time
+            morning_end_time = MORNING_WORK_END if entry_time < MINUTES_PER_DAY else MORNING_WORK_END + MINUTES_PER_DAY
+            if entry_time >= 720:  # אם נכנס אחרי 12:00, 08:00 הוא למחרת
+                morning_end_time = MORNING_WORK_END + MINUTES_PER_DAY
+            morning_end = min(morning_end_time, exit_time)
+            if morning_end > morning_start and morning_start < exit_time:
+                dynamic_segments.append({
+                    "start_time": f"{(morning_start // 60) % 24:02d}:{morning_start % 60:02d}",
+                    "end_time": f"{(morning_end // 60) % 24:02d}:{morning_end % 60:02d}",
+                    "wage_percent": 100,
+                    "segment_type": "work",
+                    "id": None
+                })
+
+            # החלפת רשימת הסגמנטים בסגמנטים הדינמיים
+            seg_list = dynamic_segments
 
         # אם זו משמרת תגבור - מוסיפים את הסגמנטים ישירות בלי לחשב חפיפה עם שעות הדיווח
         if is_fixed_segments_shift and seg_list:
