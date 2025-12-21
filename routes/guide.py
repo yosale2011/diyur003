@@ -309,6 +309,7 @@ def guide_view(
             effective_hourly_rate = MINIMUM_WAGE
 
             # Override monthly_totals payment with correctly calculated values
+            # Note: Don't include travel/extras here - the template adds them where needed
             monthly_totals["payment"] = total_payment_from_segments + total_standby_from_segments
             monthly_totals["standby_payment"] = total_standby_from_segments
             monthly_totals["effective_hourly_rate"] = effective_hourly_rate

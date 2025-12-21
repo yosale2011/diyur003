@@ -590,6 +590,9 @@ def _build_daily_map(
                 seg_list_ordered = seg_list_sorted[rotate_idx:] + seg_list_sorted[:rotate_idx]
 
                 last_s_end_norm = -1
+                minutes_covered = 0
+                covered_intervals = []
+
                 for seg in seg_list_ordered:
                     # שימוש במשתנים ייחודיים למניעת דריסת משתני הלופ החיצוני
                     orig_s_start, orig_s_end = span_minutes(seg["start_time"], seg["end_time"])
@@ -609,6 +612,14 @@ def _build_daily_map(
                     overlap = overlap_minutes(s_start, s_end, current_seg_start, current_seg_end)
                     if overlap <= 0:
                         continue
+
+                    minutes_covered += overlap
+
+                    # שמירת אינטרוול מכוסה לחישוב "חורים" בהמשך
+                    inter_start = max(s_start, current_seg_start)
+                    inter_end = min(s_end, current_seg_end)
+                    if inter_start < inter_end:
+                        covered_intervals.append((inter_start, inter_end))
 
                     # נרמול גבולות המקטע לפי workday
                     eff_start_in_part = max(current_seg_start, s_start)
@@ -634,6 +645,54 @@ def _build_daily_map(
                         eff_start, eff_end, eff_type,
                         r["shift_type_id"], segment_id, apartment_type_id, is_married
                     ))
+
+                # טיפול בשעות עבודה שלא מכוסות ע"י סגמנטים מוגדרים
+                total_part_minutes = s_end - s_start
+                remaining = total_part_minutes - minutes_covered
+
+                if remaining > 0:
+                    # מיון ומיזוג אינטרוולים חופפים
+                    covered_intervals.sort()
+                    merged_covered = []
+                    for interval in covered_intervals:
+                        if merged_covered and interval[0] <= merged_covered[-1][1]:
+                            merged_covered[-1] = (merged_covered[-1][0], max(merged_covered[-1][1], interval[1]))
+                        else:
+                            merged_covered.append(interval)
+
+                    # מציאת ה"חורים" - זמנים לא מכוסים
+                    uncovered_intervals = []
+                    current_pos = s_start
+                    for cov_start, cov_end in merged_covered:
+                        if current_pos < cov_start:
+                            uncovered_intervals.append((current_pos, cov_start))
+                        current_pos = max(current_pos, cov_end)
+                    if current_pos < s_end:
+                        uncovered_intervals.append((current_pos, s_end))
+
+                    # יצירת סגמנטי עבודה לכל זמן לא מכוסה
+                    segment_id = None
+                    apartment_type_id = r.get("apartment_type_id")
+                    is_married = r.get("is_married")
+
+                    for uncov_start, uncov_end in uncovered_intervals:
+                        uncov_duration = uncov_end - uncov_start
+                        if uncov_duration <= 0:
+                            continue
+
+                        # נרמול זמנים לפי יום עבודה
+                        if s_end <= CUTOFF:
+                            eff_uncov_start = uncov_start + MINUTES_PER_DAY
+                            eff_uncov_end = uncov_end + MINUTES_PER_DAY
+                        else:
+                            eff_uncov_start = uncov_start
+                            eff_uncov_end = uncov_end
+
+                        # הוספת סגמנט עבודה - האחוז יחושב ע"י מנגנון הרצפים
+                        entry["segments"].append((
+                            eff_uncov_start, eff_uncov_end, "work",
+                            r["shift_type_id"], segment_id, apartment_type_id, is_married
+                        ))
 
     return daily_map
 
@@ -767,7 +826,7 @@ def _calculate_chain_wages(
                 block_abs_end = current_abs_minute + block_size
 
                 # נרמול זמנים - זמנים מעל 1440 הם בבוקר (אחרי חצות)
-                # לדוגמה: 1830 = 06:30 בבוקר = לפני כניסת שבת
+                # לדוגמה: 1830 = 06:30 בבוקר של היום הבא
                 actual_block_start = block_abs_start % MINUTES_PER_DAY
                 actual_block_end = block_abs_end % MINUTES_PER_DAY
                 # אם הסגמנט חוצה חצות, end יהיה קטן מ-start
@@ -775,9 +834,16 @@ def _calculate_chain_wages(
                     actual_block_end = block_abs_end % MINUTES_PER_DAY or MINUTES_PER_DAY
 
                 # Adjust for day offset (if segment crosses midnight)
+                # day_offset מייצג את המרחק מחצות יום שישי
+                # - יום שישי: offset = 0
+                # - יום שבת: offset = 1440
+                # - יום ראשון בוקר (זמנים >= 1440 מנורמלים ליום שבת): offset = 2880
                 day_offset = 0
                 if weekday == SATURDAY:
                     day_offset = MINUTES_PER_DAY
+                    # אם הזמן המקורי חצה חצות (>=1440), זה בעצם יום ראשון בבוקר
+                    if block_abs_start >= MINUTES_PER_DAY:
+                        day_offset = 2 * MINUTES_PER_DAY
 
                 abs_start_from_fri = actual_block_start + day_offset
                 abs_end_from_fri = actual_block_end + day_offset
@@ -1348,7 +1414,35 @@ def calculate_person_monthly_totals(
 
         # חישוב תשלום חופשה
         monthly_totals["vacation_payment"] = (monthly_totals.get("vacation_minutes", 0) / 60) * minimum_wage
-    
+
+        # חישוב שעות בתעריף משתנה
+        # נבנה מפה של shift_id -> תעריף משתנה (בש"ח)
+        variable_rate_by_shift = {}
+        for r in reports:
+            shift_rate = r.get("shift_rate")
+            is_minimum_wage = r.get("shift_is_minimum_wage", True)
+            if shift_rate and not is_minimum_wage:
+                # shift_rate stored in agorot, convert to shekels
+                variable_rate_by_shift[r.get("shift_type_id")] = float(shift_rate) / 100
+
+        # נחשב את דקות העבודה מדיווחים עם תעריף משתנה ואת התשלום הנוסף
+        variable_rate_minutes = 0
+        variable_rate_extra_payment = 0.0
+        for day_key, entry in daily_map.items():
+            for seg in entry.get("segments", []):
+                s_start, s_end, s_type, shift_id, seg_id, apt_type, is_married = seg
+                if s_type == "work" and shift_id in variable_rate_by_shift:
+                    duration = s_end - s_start
+                    variable_rate_minutes += duration
+                    # חישוב התשלום הנוסף (הפרש בין התעריף לשכר מינימום)
+                    actual_rate = variable_rate_by_shift[shift_id]
+                    rate_diff = actual_rate - minimum_wage
+                    if rate_diff > 0:
+                        variable_rate_extra_payment += (duration / 60) * rate_diff
+
+        monthly_totals["calc_variable"] = variable_rate_minutes
+        monthly_totals["variable_rate_extra_payment"] = variable_rate_extra_payment
+
     # שליפת רכיבי תשלום נוספים
     month_start = datetime(year, month, 1, tzinfo=LOCAL_TZ)
     month_end = datetime(year + 1, 1, 1, tzinfo=LOCAL_TZ) if month == 12 else datetime(year, month + 1, 1, tzinfo=LOCAL_TZ)
@@ -1390,14 +1484,15 @@ def calculate_person_monthly_totals(
     pay += (monthly_totals["calc150"] / 60) * minimum_wage * 1.5
     pay += (monthly_totals["calc175"] / 60) * minimum_wage * 1.75
     pay += (monthly_totals["calc200"] / 60) * minimum_wage * 2.0
+    pay += monthly_totals.get("variable_rate_extra_payment", 0)  # תוספת עבור תעריף משתנה
     pay += monthly_totals["standby_payment"]
     pay += monthly_totals["vacation_payment"]
     monthly_totals["payment"] = pay  # תשלום בסיסי
     monthly_totals["total_payment"] = pay + monthly_totals["travel"] + monthly_totals["extras"]  # סה"כ כולל הכל
-    
+
     # populate vacation display
     monthly_totals["vacation"] = monthly_totals["vacation_minutes"]
-    
+
     return monthly_totals
 
 def _calculate_totals_from_data(
@@ -1473,24 +1568,34 @@ def _calculate_totals_from_data(
         # חישוב שעות בתעריף משתנה
         # נחשב את כל הדקות של עבודה מדיווחים עם תעריף שונה משכר מינימום
         # נשתמש ב-daily_map כדי לחשב רק את דקות העבודה (לא כוננות/חופשה)
-        # נבנה מפה של shift_id -> תעריף משתנה
-        variable_rate_shifts = set()
+        # נבנה מפה של shift_id -> תעריף משתנה (בש"ח)
+        variable_rate_by_shift = {}
         for r in reports:
             shift_rate = r.get("shift_rate")
             is_minimum_wage = r.get("shift_is_minimum_wage", True)
             if shift_rate and not is_minimum_wage:
-                variable_rate_shifts.add(r.get("shift_type_id"))
-        
-        # נחשב את דקות העבודה מדיווחים עם תעריף משתנה
+                # shift_rate stored in agorot, convert to shekels
+                variable_rate_by_shift[r.get("shift_type_id")] = float(shift_rate) / 100
+
+        # נחשב את דקות העבודה מדיווחים עם תעריף משתנה ואת התשלום הנוסף
         variable_rate_minutes = 0
+        variable_rate_extra_payment = 0.0
         for day_key, entry in daily_map.items():
             for seg in entry.get("segments", []):
                 s_start, s_end, s_type, shift_id, seg_id, apt_type, is_married = seg
-                if s_type == "work" and shift_id in variable_rate_shifts:
+                if s_type == "work" and shift_id in variable_rate_by_shift:
                     # זה סגמנט עבודה עם תעריף משתנה
-                    variable_rate_minutes += (s_end - s_start)
-        
+                    duration = s_end - s_start
+                    variable_rate_minutes += duration
+                    # חישוב התשלום הנוסף (הפרש בין התעריף לשכר מינימום)
+                    actual_rate = variable_rate_by_shift[shift_id]
+                    rate_diff = actual_rate - minimum_wage
+                    if rate_diff > 0:
+                        # הוספת ההפרש (לפי 100% - כי ה-overtime כבר מחושב בחישוב הרגיל)
+                        variable_rate_extra_payment += (duration / 60) * rate_diff
+
         monthly_totals["calc_variable"] = variable_rate_minutes
+        monthly_totals["variable_rate_extra_payment"] = variable_rate_extra_payment
 
         monthly_totals["actual_work_days"] = len(work_days_set)
         monthly_totals["vacation_days_taken"] = len(vacation_days_set)
@@ -1526,6 +1631,7 @@ def _calculate_totals_from_data(
     pay += (monthly_totals["calc150"] / 60) * minimum_wage * 1.5
     pay += (monthly_totals["calc175"] / 60) * minimum_wage * 1.75
     pay += (monthly_totals["calc200"] / 60) * minimum_wage * 2.0
+    pay += monthly_totals.get("variable_rate_extra_payment", 0)  # תוספת עבור תעריף משתנה
     pay += monthly_totals["standby_payment"]
     pay += monthly_totals["vacation_payment"]
     monthly_totals["payment"] = pay

@@ -222,6 +222,7 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                     entry["shifts"].add(r["shift_name"])
                     
                 minutes_covered = 0
+                covered_intervals = []  # לאיסוף אינטרוולים מכוסים לחישוב "חורים" בהמשך
                 is_second_day = (p_date > r_date)
                 
                 # Sort segments chronologically by start time
@@ -329,7 +330,13 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                         continue
                         
                     minutes_covered += overlap
-                    
+
+                    # שמירת אינטרוול מכוסה לחישוב "חורים" בהמשך
+                    inter_start = max(s_start, current_seg_start)
+                    inter_end = min(s_end, current_seg_end)
+                    if inter_start < inter_end:
+                        covered_intervals.append((inter_start, inter_end))
+
                     # Determine effective type
                     if is_sick_report:
                          effective_seg_type = "sick"
@@ -386,35 +393,7 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                 remaining = total_part_minutes - minutes_covered
 
                 if remaining > 0:
-                    # יצירת רשימה של כל הזמנים המכוסים ע"י סגמנטים
-                    # ואז מציאת ה"חורים" - הזמנים שלא מכוסים
-                    covered_intervals = []
-
-                    # איסוף כל האינטרוולים המכוסים
-                    last_s_end_norm_2 = -1
-                    for seg in seg_list_ordered:
-                        orig_s_start_2, orig_s_end_2 = span_minutes(seg["start_time"], seg["end_time"])
-
-                        if last_s_end_norm_2 != -1:
-                            while orig_s_start_2 < last_s_end_norm_2:
-                                orig_s_start_2 += MINUTES_PER_DAY
-                                orig_s_end_2 += MINUTES_PER_DAY
-                        last_s_end_norm_2 = orig_s_end_2
-
-                        if is_second_day:
-                            current_seg_start_2 = orig_s_start_2 - MINUTES_PER_DAY
-                            current_seg_end_2 = orig_s_end_2 - MINUTES_PER_DAY
-                        else:
-                            current_seg_start_2 = orig_s_start_2
-                            current_seg_end_2 = orig_s_end_2
-
-                        # חישוב החפיפה בין הדיווח לסגמנט
-                        inter_start = max(s_start, current_seg_start_2)
-                        inter_end = min(s_end, current_seg_end_2)
-                        if inter_start < inter_end:
-                            covered_intervals.append((inter_start, inter_end))
-
-                    # מיון ומיזוג אינטרוולים חופפים
+                    # מיון ומיזוג אינטרוולים חופפים (covered_intervals נאסף בלולאה הראשית)
                     covered_intervals.sort()
                     merged_covered = []
                     for interval in covered_intervals:
@@ -739,8 +718,10 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
             # Convert to format expected by _calculate_chain_wages: (start, end, shift_id)
             chain_segs = [(s, e, sid) for s, e, l, sid, apt, adate in segments]
 
-            # Use the actual_date from the first segment for Shabbat calculation (not display date)
-            calc_date = segments[0][5] if segments and segments[0][5] else day_date
+            # Use display day_date for Shabbat calculation
+            # The display date is the actual calendar date when work was performed
+            # (e.g., Saturday 08/11 even if the report started on Friday 07/11)
+            calc_date = day_date
 
             # Use optimized block calculation with carryover offset
             result = _calculate_chain_wages(chain_segs, calc_date, shabbat_cache, minutes_offset)
@@ -788,12 +769,18 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
 
                 # Calculate payment and counts for this segment based on its label
                 seg_c100, seg_c125, seg_c150, seg_c175, seg_c200 = 0, 0, 0, 0, 0
+                seg_c150_shabbat, seg_c150_overtime = 0, 0
                 if "100%" in seg_label:
                     seg_c100 = seg_duration
                 elif "125%" in seg_label:
                     seg_c125 = seg_duration
                 elif "150%" in seg_label:
                     seg_c150 = seg_duration
+                    # Check if Shabbat or overtime
+                    if is_shabbat:
+                        seg_c150_shabbat = seg_duration
+                    else:
+                        seg_c150_overtime = seg_duration
                 elif "175%" in seg_label:
                     seg_c175 = seg_duration
                 elif "200%" in seg_label:
@@ -812,6 +799,8 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                     "calc100": seg_c100,
                     "calc125": seg_c125,
                     "calc150": seg_c150,
+                    "calc150_shabbat": seg_c150_shabbat,
+                    "calc150_overtime": seg_c150_overtime,
                     "calc175": seg_c175,
                     "calc200": seg_c200,
                     "type": "work",

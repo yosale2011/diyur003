@@ -10,7 +10,10 @@
       "Bash(chcp 6500)",
       "Bash(git -C \"f:\\\\DiyurClock\\\\105\\\\diyur003\" status:*)",
       "Bash(del \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\check_shifts.py\")",
-      "Bash(chcp 65001)"
+      "Bash(chcp 65001)",
+      "Bash(grep:*)",
+      "Bash(del \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\debug_check.py\")",
+      "Bash(del \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\debug_gap.py\" \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\debug_gap2.py\" \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\debug_gap3.py\" \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\debug_gap4.py\" \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\debug_gap5.py\" \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\debug_gap6.py\" \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\debug_gap7.py\" \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\debug_gap8.py\" \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\debug_gap9.py\" \"f:\\\\DiyurClock\\\\105\\\\diyur003\\\\debug_gap10.py\")"
     ],
     "deny": [],
     "ask": []
