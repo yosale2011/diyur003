@@ -730,13 +730,33 @@
               {% set weekday_payment = payment_calc100 + payment_calc125 + payment_calc150_overtime %}
               {% set shabbat_payment = payment_calc150_shabbat + payment_calc175 + payment_calc200 %}
               
+              {# חישוב כוננויות לפי חול/שבת - שימוש ב-namespace כי Jinja2 לא מעדכן משתנים בלולאה #}
+              {% set ns_standby = namespace(weekday=0, shabbat=0) %}
+              {% if daily_segments %}
+                {% for day in daily_segments %}
+                  {% if day.date_obj %}
+                    {% set day_of_week = day.date_obj.weekday() %}
+                    {% set day_standby = day.standby_payment or 0 %}
+                    {% if day_of_week == 4 or day_of_week == 5 %}
+                      {# יום שישי (4) או שבת (5) - שבת #}
+                      {% set ns_standby.shabbat = ns_standby.shabbat + day_standby %}
+                    {% else %}
+                      {# חול #}
+                      {% set ns_standby.weekday = ns_standby.weekday + day_standby %}
+                    {% endif %}
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+              {% set weekday_standby_payment = ns_standby.weekday %}
+              {% set shabbat_standby_payment = ns_standby.shabbat %}
+              
               {# שורה ראשונה - סיכום חול #}
               <tr style="background-color: #e8f4f8; font-weight: bold; border-top: 2px solid #000;">
                 <td colspan="3" style="text-align: right; padding: 6px 8px;">
                   <strong>סיכום חול:</strong>
                 </td>
                 <td style="text-align: center; padding: 6px 8px; font-weight: bold;">
-                  {{ "%.2f"|format(weekday_payment) }}
+                  {{ "%.2f"|format(weekday_payment + weekday_standby_payment) }}
                 </td>
                 <td style="text-align: center; padding: 6px 8px;">
                   {{ weekday_total_hours | round(2) }}
@@ -744,8 +764,8 @@
                 <td style="text-align: center; padding: 6px 8px;">
                   {{ "%.2f"|format(weekday_payment) }}
                 </td>
-                <td style="text-align: center; padding: 6px 8px;">
-                  <!-- פירוט מקטעים יופיע בשורה נפרדת -->
+                <td style="text-align: center; padding: 6px 8px; font-size: 0.85em;">
+                  {{ "%.2f"|format(weekday_standby_payment) }}
                 </td>
                 <td style="text-align: center; padding: 6px 8px;">{{ calc100_hours | round(2) }}</td>
                 <td style="text-align: center; padding: 6px 8px;">{{ calc125_hours | round(2) }}</td>
@@ -761,7 +781,7 @@
                   <strong>סיכום שבת:</strong>
                 </td>
                 <td style="text-align: center; padding: 6px 8px; font-weight: bold;">
-                  {{ "%.2f"|format(shabbat_payment) }}
+                  {{ "%.2f"|format(shabbat_payment + shabbat_standby_payment) }}
                 </td>
                 <td style="text-align: center; padding: 6px 8px;">
                   {{ shabbat_total_hours | round(2) }}
@@ -769,8 +789,8 @@
                 <td style="text-align: center; padding: 6px 8px;">
                   {{ "%.2f"|format(shabbat_payment) }}
                 </td>
-                <td style="text-align: center; padding: 6px 8px;">
-                  <!-- פירוט מקטעים יופיע בשורה נפרדת -->
+                <td style="text-align: center; padding: 6px 8px; font-size: 0.85em;">
+                  {{ "%.2f"|format(shabbat_standby_payment) }}
                 </td>
                 <td style="text-align: center; padding: 6px 8px;">-</td>
                 <td style="text-align: center; padding: 6px 8px;">-</td>
@@ -794,8 +814,8 @@
                 <td style="text-align: center; padding: 6px 8px;">
                   {{ "%.2f"|format((monthly_totals.payment or 0) - (monthly_totals.standby_payment or 0)) }}
                 </td>
-                <td style="text-align: center; padding: 6px 8px;">
-                  <!-- פירוט מקטעים יופיע בשורה נפרדת -->
+                <td style="text-align: center; padding: 6px 8px; font-size: 0.85em;">
+                  {{ "%.2f"|format(monthly_totals.standby_payment or 0) }}
                 </td>
                 <td style="text-align: center; padding: 6px 8px;">{{ (monthly_totals.calc100 | float / 60) | round(2) }}</td>
                 <td style="text-align: center; padding: 6px 8px;">{{ (monthly_totals.calc125 | float / 60) | round(2) }}</td>
@@ -805,20 +825,22 @@
                 <td style="text-align: center; padding: 6px 8px;">-</td>
               </tr>
               
-              {# שורה נפרדת לפירוט מקטעים #}
+              {# שורה נפרדת לפירוט מקטעים - רק נסיעות ותוספות #}
               <tr style="background-color: #f5f5f5; border-top: 1px solid #ccc;">
                 <td colspan="6" style="text-align: right; padding: 4px 8px; font-weight: bold; font-size: 0.9em;">
                   פירוט מקטעים:
                 </td>
                 <td colspan="7" style="text-align: right; padding: 4px 8px; font-size: 0.85em;">
-                  {{ "%.2f"|format(monthly_totals.standby_payment or 0) }}
                   {% if monthly_totals.travel or monthly_totals.extras %}
                     {% if monthly_totals.travel %}
-                      | נסיעות: {{ "%.2f"|format(monthly_totals.travel or 0) }}
+                      נסיעות: {{ "%.2f"|format(monthly_totals.travel or 0) }}
                     {% endif %}
+                    {% if monthly_totals.travel and monthly_totals.extras %} | {% endif %}
                     {% if monthly_totals.extras %}
-                      | תוספות: {{ "%.2f"|format(monthly_totals.extras or 0) }}
+                      תוספות: {{ "%.2f"|format(monthly_totals.extras or 0) }}
                     {% endif %}
+                  {% else %}
+                    -
                   {% endif %}
                 </td>
               </tr>
