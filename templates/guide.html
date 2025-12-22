@@ -698,9 +698,92 @@
               </tr>
             </thead>
             <tbody>
+              {# חישוב סיכום חול ושבת #}
+              {% set calc100_hours = (monthly_totals.calc100 or 0) / 60 %}
+              {% set calc125_hours = (monthly_totals.calc125 or 0) / 60 %}
+              {% set calc150_overtime_hours = (monthly_totals.calc150_overtime or 0) / 60 %}
+              {% set calc150_shabbat_hours = (monthly_totals.calc150_shabbat or 0) / 60 %}
+              {% set calc175_hours = (monthly_totals.calc175 or 0) / 60 %}
+              {% set calc200_hours = (monthly_totals.calc200 or 0) / 60 %}
+              
+              {% set weekday_total_hours = calc100_hours + calc125_hours + calc150_overtime_hours %}
+              {% set shabbat_total_hours = calc150_shabbat_hours + calc175_hours + calc200_hours %}
+              
+              {# חישוב תשלום חול ושבת - שימוש בתשלום המחושב אם יש, אחרת חישוב לפי שכר מינימום #}
+              {% set payment_calc100 = monthly_totals.get('payment_calc100', 0) or 0 %}
+              {% set payment_calc125 = monthly_totals.get('payment_calc125', 0) or 0 %}
+              {% set payment_calc150 = monthly_totals.get('payment_calc150', 0) or 0 %}
+              {% set payment_calc175 = monthly_totals.get('payment_calc175', 0) or 0 %}
+              {% set payment_calc200 = monthly_totals.get('payment_calc200', 0) or 0 %}
+              
+              {# חישוב תשלום חול - calc100 + calc125 + calc150_overtime (חלק מ-calc150) #}
+              {% set total_calc150_hours = calc150_overtime_hours + calc150_shabbat_hours %}
+              {% if total_calc150_hours > 0 %}
+                {% set calc150_overtime_ratio = calc150_overtime_hours / total_calc150_hours %}
+                {% set payment_calc150_overtime = payment_calc150 * calc150_overtime_ratio %}
+                {% set payment_calc150_shabbat = payment_calc150 * (1 - calc150_overtime_ratio) %}
+              {% else %}
+                {% set payment_calc150_overtime = 0 %}
+                {% set payment_calc150_shabbat = 0 %}
+              {% endif %}
+              
+              {% set weekday_payment = payment_calc100 + payment_calc125 + payment_calc150_overtime %}
+              {% set shabbat_payment = payment_calc150_shabbat + payment_calc175 + payment_calc200 %}
+              
+              {# שורה ראשונה - סיכום חול #}
+              <tr style="background-color: #e8f4f8; font-weight: bold; border-top: 2px solid #000;">
+                <td colspan="3" style="text-align: right; padding: 6px 8px;">
+                  <strong>סיכום חול:</strong>
+                </td>
+                <td style="text-align: center; padding: 6px 8px; font-weight: bold;">
+                  {{ "%.2f"|format(weekday_payment) }}
+                </td>
+                <td style="text-align: center; padding: 6px 8px;">
+                  {{ weekday_total_hours | round(2) }}
+                </td>
+                <td style="text-align: center; padding: 6px 8px;">
+                  {{ "%.2f"|format(weekday_payment) }}
+                </td>
+                <td style="text-align: center; padding: 6px 8px;">
+                  <!-- פירוט מקטעים יופיע בשורה נפרדת -->
+                </td>
+                <td style="text-align: center; padding: 6px 8px;">{{ calc100_hours | round(2) }}</td>
+                <td style="text-align: center; padding: 6px 8px;">{{ calc125_hours | round(2) }}</td>
+                <td style="text-align: center; padding: 6px 8px;">{{ calc150_overtime_hours | round(2) }}</td>
+                <td style="text-align: center; padding: 6px 8px;">-</td>
+                <td style="text-align: center; padding: 6px 8px;">-</td>
+                <td style="text-align: center; padding: 6px 8px;">-</td>
+              </tr>
+              
+              {# שורה שנייה - סיכום שבת #}
+              <tr style="background-color: #fff4e6; font-weight: bold; border-top: 1px solid #ccc;">
+                <td colspan="3" style="text-align: right; padding: 6px 8px;">
+                  <strong>סיכום שבת:</strong>
+                </td>
+                <td style="text-align: center; padding: 6px 8px; font-weight: bold;">
+                  {{ "%.2f"|format(shabbat_payment) }}
+                </td>
+                <td style="text-align: center; padding: 6px 8px;">
+                  {{ shabbat_total_hours | round(2) }}
+                </td>
+                <td style="text-align: center; padding: 6px 8px;">
+                  {{ "%.2f"|format(shabbat_payment) }}
+                </td>
+                <td style="text-align: center; padding: 6px 8px;">
+                  <!-- פירוט מקטעים יופיע בשורה נפרדת -->
+                </td>
+                <td style="text-align: center; padding: 6px 8px;">-</td>
+                <td style="text-align: center; padding: 6px 8px;">-</td>
+                <td style="text-align: center; padding: 6px 8px;">{{ calc150_shabbat_hours | round(2) }}</td>
+                <td style="text-align: center; padding: 6px 8px;">{{ calc175_hours | round(2) }}</td>
+                <td style="text-align: center; padding: 6px 8px;">{{ calc200_hours | round(2) }}</td>
+                <td style="text-align: center; padding: 6px 8px;">-</td>
+              </tr>
+              
+              {# שורה שלישית - סיכום כללי #}
               <tr style="background-color: #e0e0e0; font-weight: bold; border-top: 2px solid #000;">
                 <td colspan="3" style="text-align: right; padding: 6px 8px;">
-                  <strong>סיכום חודשי:</strong>
+                  <strong>סיכום כללי:</strong>
                 </td>
                 <td style="text-align: center; padding: 6px 8px; font-weight: bold;">
                   {{ "%.2f"|format((monthly_totals.payment or 0) + (monthly_totals.travel or 0) + (monthly_totals.extras or 0)) }}
@@ -721,7 +804,8 @@
                 <td style="text-align: center; padding: 6px 8px;">{{ (monthly_totals.calc200 | float / 60) | round(2) }}</td>
                 <td style="text-align: center; padding: 6px 8px;">-</td>
               </tr>
-              <!-- שורה נפרדת לפירוט מקטעים -->
+              
+              {# שורה נפרדת לפירוט מקטעים #}
               <tr style="background-color: #f5f5f5; border-top: 1px solid #ccc;">
                 <td colspan="6" style="text-align: right; padding: 4px 8px; font-weight: bold; font-size: 0.9em;">
                   פירוט מקטעים:
