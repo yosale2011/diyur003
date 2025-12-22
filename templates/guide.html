@@ -579,7 +579,9 @@
                   <td>{{ chain.end_time }}</td>
                   <td style="font-size: 0.85em; color: #666;">{{ chain.apartment_name or '-' }}</td>
                   <td>
-                    {% if chain.type == 'standby' %}
+                    {% if chain.shift_type %}
+                      <strong>{{ chain.shift_type }}</strong>
+                    {% elif chain.type == 'standby' %}
                       <strong>כוננות</strong>
                     {% elif chain.type == 'vacation' %}
                       <strong>חופשה</strong>

@@ -94,10 +94,14 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
     # Build a map of shift_type_id -> effective hourly rate
     # This allows using custom rates for special shifts (like cleaning)
     shift_rates = {}
+    shift_names_map = {}  # Map shift_id -> shift_name
     for r in reports:
         shift_id = r.get("shift_type_id")
-        if shift_id and shift_id not in shift_rates:
-            shift_rates[shift_id] = get_effective_hourly_rate(r, minimum_wage)
+        if shift_id:
+            if shift_id not in shift_rates:
+                shift_rates[shift_id] = get_effective_hourly_rate(r, minimum_wage)
+            if shift_id not in shift_names_map:
+                shift_names_map[shift_id] = r.get("shift_name", "")
         
     daily_map = {}
     
@@ -676,6 +680,22 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                 duration = e - s
                 # Get effective hourly rate for this shift (uses custom rate if defined)
                 effective_rate = shift_rates.get(sid, minimum_wage)
+                shift_name_str = shift_names_map.get(sid, "") if sid else ""
+                
+                # Determine shift type label
+                shift_type_label = ""
+                if shift_name_str:
+                    if "תגבור" in shift_name_str:
+                        shift_type_label = "תגבור"
+                    elif "לילה" in shift_name_str:
+                        shift_type_label = "לילה"
+                    elif "שבת" in shift_name_str or "ערב שבת" in shift_name_str:
+                        shift_type_label = "שבת"
+                    else:
+                        shift_type_label = "חול"
+                else:
+                    shift_type_label = "חול"
+                
                 # חישוב לפי האחוז הקבוע
                 if "100%" in label:
                     d_calc100 += duration
@@ -713,6 +733,8 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                     "calc200": duration if "200%" in label else 0,
                     "type": "work",
                     "apartment_name": apt_name or "",
+                    "shift_name": shift_name_str,
+                    "shift_type": shift_type_label,
                     "segments": [(start_str, end_str, label)],
                     "break_reason": "",
                     "from_prev_day": False,
@@ -738,6 +760,8 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                     "calc125": 0, "calc150": 0, "calc175": 0, "calc200": 0,
                     "type": "vacation",
                     "apartment_name": "",
+                    "shift_name": "חופשה",
+                    "shift_type": "חופשה",
                     "segments": [(start_str, end_str, "חופשה")],
                     "break_reason": "",
                     "from_prev_day": False,
@@ -871,10 +895,16 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
 
             # Get apartment names from segments - segments is (start, end, label, sid, apt_name, actual_date)
             chain_apartments = set()
+            chain_shift_names = set()
             for s, e, l, sid, apt, adate in segments:
                 if apt:
                     chain_apartments.add(apt)
+                if sid:
+                    shift_name = shift_names_map.get(sid, "")
+                    if shift_name:
+                        chain_shift_names.add(shift_name)
             apt_name = ", ".join(sorted(chain_apartments)) if chain_apartments else ""
+            shift_name_str = ", ".join(sorted(chain_shift_names)) if chain_shift_names else ""
 
             # Create a separate chain row for each rate segment (like the old code)
             for i, (seg_start, seg_end, seg_label, is_shabbat) in enumerate(seg_detail):
@@ -907,6 +937,20 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                 start_str = f"{seg_start // 60 % 24:02d}:{seg_start % 60:02d}"
                 end_str = f"{seg_end // 60 % 24:02d}:{seg_end % 60:02d}"
 
+                # Determine shift type label
+                shift_type_label = ""
+                if shift_name_str:
+                    if "תגבור" in shift_name_str:
+                        shift_type_label = "תגבור"
+                    elif "לילה" in shift_name_str:
+                        shift_type_label = "לילה"
+                    elif is_shabbat:
+                        shift_type_label = "שבת"
+                    else:
+                        shift_type_label = "חול"
+                else:
+                    shift_type_label = "חול" if not is_shabbat else "שבת"
+                
                 chains.append({
                     "start_time": start_str,
                     "end_time": end_str,
@@ -921,6 +965,8 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                     "calc200": seg_c200,
                     "type": "work",
                     "apartment_name": apt_name,
+                    "shift_name": shift_name_str,
+                    "shift_type": shift_type_label,
                     "segments": [(start_str, end_str, seg_label)],
                     "break_reason": break_reason if is_last else "",
                     "from_prev_day": (seg_start >= MINUTES_PER_DAY) if is_first else False,
@@ -1012,6 +1058,8 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                         "calc100": 0, "calc125": 0, "calc150": 0, "calc175": 0, "calc200": 0,
                         "type": "standby",
                         "apartment_name": event.get("apartment_name", ""),
+                        "shift_name": "כוננות",
+                        "shift_type": "כוננות",
                         "segments": [],
                         "break_reason": "",
                         "from_prev_day": start >= MINUTES_PER_DAY,
@@ -1029,6 +1077,8 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                         "calc100": 0, "calc125": 0, "calc150": 0, "calc175": 0, "calc200": 0,
                         "type": "vacation",
                         "apartment_name": "",
+                        "shift_name": "חופשה" if etype == "vacation" else "מחלה",
+                        "shift_type": "חופשה" if etype == "vacation" else "מחלה",
                         "segments": [],
                         "break_reason": "",
                         "from_prev_day": start >= MINUTES_PER_DAY,
