@@ -793,6 +793,38 @@ def get_daily_segments_data(conn, person_id: int, year: int, month: int, shabbat
                     "effective_rate": minimum_wage,
                 })
 
+            # עיבוד כוננויות רק למשמרות תגבור (לא לחופשה/מחלה)
+            is_tagbur = any("תגבור" in sn for sn in shift_names)
+            if is_tagbur and standby_segments:
+                for sb_start, sb_end, seg_id, apt_type, married, actual_date in standby_segments:
+                    duration = sb_end - sb_start
+                    if duration <= 0:
+                        continue
+
+                    # חישוב תשלום כוננות
+                    standby_rate = get_standby_rate(conn, seg_id or 0, apt_type, bool(married)) if seg_id else DEFAULT_STANDBY_RATE
+                    d_standby_pay += standby_rate
+
+                    start_str = f"{sb_start // 60 % 24:02d}:{sb_start % 60:02d}"
+                    end_str = f"{sb_end // 60 % 24:02d}:{sb_end % 60:02d}"
+
+                    chains.append({
+                        "start_time": start_str,
+                        "end_time": end_str,
+                        "total_minutes": duration,
+                        "payment": standby_rate,
+                        "calc100": 0, "calc125": 0, "calc150": 0, "calc175": 0, "calc200": 0,
+                        "type": "standby",
+                        "apartment_name": "",
+                        "shift_name": "כוננות",
+                        "shift_type": "כוננות",
+                        "segments": [(start_str, end_str, "כוננות")],
+                        "break_reason": "",
+                        "from_prev_day": False,
+                        "effective_rate": 0,
+                        "standby_rate": standby_rate,
+                    })
+
             total_minutes = sum(w[1]-w[0] for w in work_segments) + sum(v[1]-v[0] for v in vacation_segments) + sum(s[1]-s[0] for s in sick_segments)
 
             daily_segments.append({
