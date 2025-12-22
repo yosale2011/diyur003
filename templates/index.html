@@ -20,7 +20,7 @@
       {% endfor %}
     </select>
     <label for="q">חיפוש:</label>
-    <input id="q" name="q" type="text" value="{{ q }}" placeholder="שם מדריך" style="padding: 6px 10px; border:1px solid #c8d1dc; border-radius:6px;">
+    <input id="q" name="q" type="text" value="{{ q }}" placeholder="שם מדריך" oninput="filterInstructors()" style="padding: 6px 10px; border:1px solid #c8d1dc; border-radius:6px;">
     <button type="submit">עדכן</button>
     {% if selected_month and selected_year %}
       <span class="muted">חודש מוצג: {{ "%02d"|format(selected_month) }}/{{ selected_year }}</span>
@@ -39,7 +39,7 @@
     </thead>
     <tbody>
       {% for g in guides %}
-      <tr>
+      <tr class="instructor-row" data-name="{{ g['name'] }}">
         <td data-sort-value="{{ g['name'] }}">
           <a href="/guide/{{ g['id'] }}{% if selected_month and selected_year %}?month={{ selected_month }}&year={{ selected_year }}{% endif %}" style="text-decoration: none; color: #0969da; font-weight: 500;" title="לחץ לצפייה בדוח מפורט">
             {{ g['name'] }}
@@ -130,7 +130,39 @@
 </style>
 
 <script>
+  function filterInstructors() {
+    const searchInput = document.getElementById('q');
+    const filterValue = searchInput.value.toLowerCase().trim();
+    const rows = document.querySelectorAll('#guidesTable tbody tr.instructor-row');
+    
+    rows.forEach(function(row) {
+      const name = row.getAttribute('data-name') || '';
+      if (filterValue === '' || name.toLowerCase().includes(filterValue)) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+    
+    // Handle "לא נמצאו מדריכים" row
+    const noResultsRow = document.querySelector('#guidesTable tbody tr:not(.instructor-row)');
+    if (noResultsRow) {
+      const visibleRows = Array.from(rows).filter(row => row.style.display !== 'none');
+      if (visibleRows.length === 0 && filterValue !== '') {
+        noResultsRow.style.display = '';
+      } else {
+        noResultsRow.style.display = 'none';
+      }
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
+    // Filter on page load if there's a search query
+    const searchInput = document.getElementById('q');
+    if (searchInput && searchInput.value) {
+      filterInstructors();
+    }
+    
     // Auto-submit form when month or year changes
     const monthSelect = document.getElementById('month');
     const yearSelect = document.getElementById('year');
