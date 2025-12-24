@@ -32,6 +32,14 @@ from routes.export import (
     export_gesher_preview,
     export_excel,
 )
+from routes.email import (
+    email_settings_page,
+    update_email_settings,
+    test_email_settings,
+    send_test_email_route,
+    send_guide_email_route,
+    send_all_guides_email_route,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -191,6 +199,43 @@ def export_gesher_preview_route(request: Request, year: int = None, month: int =
 def export_excel_route(year: int = None, month: int = None):
     """Export monthly summary to Excel."""
     return export_excel(year, month)
+
+
+# Email routes
+@app.get("/admin/email-settings", response_class=HTMLResponse)
+def email_settings_route(request: Request):
+    """Email settings page."""
+    return email_settings_page(request)
+
+
+@app.post("/admin/email-settings/update")
+async def update_email_settings_route(request: Request):
+    """Update email settings."""
+    return await update_email_settings(request)
+
+
+@app.post("/admin/email-settings/test")
+async def test_email_settings_route(request: Request):
+    """Test email connection."""
+    return await test_email_settings(request)
+
+
+@app.post("/admin/email-settings/send-test")
+async def send_test_email_api(request: Request):
+    """Send a test email."""
+    return await send_test_email_route(request)
+
+
+@app.post("/api/send-guide-email/{person_id}")
+def send_guide_email_api(request: Request, person_id: int, year: int, month: int):
+    """Send guide report email to a specific person."""
+    return send_guide_email_route(request, person_id, year, month)
+
+
+@app.post("/api/send-all-guides-email")
+def send_all_guides_email_api(request: Request, year: int, month: int):
+    """Send guide report emails to all active guides."""
+    return send_all_guides_email_route(request, year, month)
 
 
 if __name__ == "__main__":

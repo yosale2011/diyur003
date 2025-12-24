@@ -30,11 +30,11 @@
       display: none !important;
     }
     
-    /* Show only the chains panel */
-    .panel {
-      display: none;
+    /* Show only the chains panel and force hide others */
+    .tab-panels .panel {
+      display: none !important;
     }
-    .panel-chains {
+    .tab-panels .panel-chains {
       display: block !important;
     }
     
@@ -308,7 +308,9 @@
       {% else %}{{ person['type'] or '-' }}{% endif %}
       |
       טלפון: {{ person['phone'] or '-' }} |
-      אימייל: {{ person['email'] or '-' }}
+      אימייל: {{ person['email'] or '-' }} |
+      מפעל: {{ person['employer_code'] or '001' }} |
+      מירב: {{ person['meirav_code'] or '-' }}
     </div>
   </div>
 
@@ -549,7 +551,8 @@
           <h2 style="margin: 0; font-size: 20px;">דוח פירוט רצפים</h2>
           <div style="display: flex; gap: 8px;">
             <button type="button" id="toggleStandbyBtn" onclick="toggleStandby()" style="background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">הסתר כוננויות</button>
-            <button type="button" onclick="window.print()" class="no-print" style="background: #007bff; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">🖨️ הדפס דוח</button>
+            <button type="button" onclick="printReport()" class="no-print" style="background: #007bff; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">🖨️ הדפס דוח</button>
+            <button type="button" id="sendEmailBtn" onclick="sendEmail()" class="no-print" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">📧 שלח במייל</button>
           </div>
         </div>
         {% if daily_segments %}
@@ -1310,6 +1313,74 @@
     
     btn.innerText = isHiding ? 'הצג כוננויות' : 'הסתר כוננויות';
     btn.style.opacity = isHiding ? '0.8' : '1';
+  }
+
+  function printReport() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('print', '1');
+    // פתיחה בחלון חדש (לא טאב) מנותק לחלוטין
+    const width = 1000;
+    const height = 800;
+    const left = (window.screen.width / 2) - (width / 2);
+    const top = (window.screen.height / 2) - (height / 2);
+
+    // שימוש ב-windowFeatures כדי לכפות חלון נפרד ולנתק את הקשר
+    const newWin = window.open(url.toString(), '_blank', `width=${width},height=${height},top=${top},left=${left},noopener,noreferrer,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes`);
+
+    // ניתוק נוסף ליתר ביטחון
+    if (newWin) {
+        try {
+            newWin.opener = null;
+        } catch(e) {}
+    }
+  }
+
+  async function sendEmail() {
+    const btn = document.getElementById('sendEmailBtn');
+    const originalText = btn.innerText;
+
+    if (!confirm('לשלוח את הדוח במייל למדריך?')) {
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = 'שולח...';
+
+    try {
+      const personId = {{ person.id }};
+      const year = {{ selected_year }};
+      const month = {{ selected_month }};
+
+      const response = await fetch(`/api/send-guide-email/${personId}?year=${year}&month=${month}`, {
+        method: 'POST'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(result.message || 'המייל נשלח בהצלחה!');
+      } else {
+        alert('שגיאה: ' + (result.error || 'שגיאה לא ידועה'));
+      }
+    } catch (error) {
+      alert('שגיאת רשת: ' + error.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerText = originalText;
+    }
+  }
+
+  // Auto-print if 'print=1' is in URL
+  window.onload = function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('print') === '1') {
+      // Small delay to ensure styles and tables are fully rendered
+      setTimeout(() => {
+        window.print();
+        // Optional: close the window after print dialog is closed
+        // window.onafterprint = () => window.close();
+      }, 500);
+    }
   }
 </script>
 {% endblock %}

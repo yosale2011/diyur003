@@ -161,7 +161,13 @@ def guide_view(
         logger.info(f"get_minimum_wage took: {time.time() - wage_start:.4f}s")
 
         person = conn.execute(
-            "SELECT id, name, phone, email, type, is_active, start_date, meirav_code FROM people WHERE id = %s",
+            """
+            SELECT p.id, p.name, p.phone, p.email, p.type, p.is_active, p.start_date, p.meirav_code, 
+                   e.code as employer_code, e.name as employer_name
+            FROM people p
+            LEFT JOIN employers e ON p.employer_id = e.id
+            WHERE p.id = %s
+            """,
             (person_id,),
         ).fetchone()
         if not person:

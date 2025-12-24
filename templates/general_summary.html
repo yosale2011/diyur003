@@ -45,7 +45,7 @@
                     {% endfor %}
                 </select>
             </form>
-            <button onclick="window.print()" style="padding: 4px 10px; font-size: 12px;">הדפס דוח</button>
+            <button onclick="printReport()" style="padding: 4px 10px; font-size: 12px;">הדפס דוח</button>
             <a href="/export/excel?year={{ selected_year }}&month={{ selected_month }}" style="text-decoration: none; padding: 4px 10px; font-size: 12px; background: #28a745; color: white; border-radius: 4px;">ייצוא אקסל</a>
             <a href="/export/gesher/preview?year={{ selected_year }}&month={{ selected_month }}" style="text-decoration: none; padding: 4px 10px; font-size: 12px; background: #007bff; color: white; border-radius: 4px;">ייצוא גשר</a>
             <a href="/" style="text-decoration: none; padding: 4px 10px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; color: #333;">חזרה</a>
@@ -183,6 +183,36 @@ function clearFilter() {
     }
 }
 
+function printReport() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('print', '1');
+    
+    // פתיחה בחלון חדש (לא טאב) מנותק לחלוטין
+    const width = 1000;
+    const height = 800;
+    const left = (window.screen.width / 2) - (width / 2);
+    const top = (window.screen.height / 2) - (height / 2);
+    
+    const newWin = window.open(url.toString(), '_blank', `width=${width},height=${height},top=${top},left=${left},noopener,noreferrer,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes`);
+    
+    if (newWin) {
+        try {
+            newWin.opener = null;
+        } catch(e) {}
+    }
+}
+
+// Auto-print if 'print=1' is in URL
+window.onload = function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('print') === '1') {
+        // Small delay to ensure table is fully rendered
+        setTimeout(() => {
+            window.print();
+        }, 500);
+    }
+}
+
 function sortTable(n) {
   var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
   table = document.getElementById("summaryTable");
@@ -234,7 +264,7 @@ function parseCellValue(td) {
     var val = td.textContent || td.innerText;
     val = val.trim().replace(/[₪,]/g, ""); // Remove currency and commas
     if (val === "" || val === "-") return -Infinity; // Treat empty as minimal
-    
+
     var num = parseFloat(val);
     // If it's a valid number, return it. Otherwise return string for text sorting
     return isNaN(num) ? val.toLowerCase() : num;

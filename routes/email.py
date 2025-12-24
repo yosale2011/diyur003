@@ -1,0 +1,155 @@
+"""
+Email routes for DiyurCalc application.
+Contains routes for email settings management and sending guide reports.
+"""
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+
+from fastapi import Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+from config import config
+from database import get_conn
+from email_service import (
+    get_email_settings,
+    save_email_settings,
+    test_email_connection,
+    send_test_email,
+    send_guide_email,
+    send_all_guides_email,
+)
+from utils import human_date, format_currency
+
+logger = logging.getLogger(__name__)
+
+templates = Jinja2Templates(directory=str(config.TEMPLATES_DIR))
+templates.env.filters["human_date"] = human_date
+templates.env.filters["format_currency"] = format_currency
+templates.env.globals["app_version"] = config.VERSION
+
+
+def email_settings_page(request: Request) -> HTMLResponse:
+    """Display email settings management page."""
+    with get_conn() as conn:
+        settings = get_email_settings(conn)
+
+    return templates.TemplateResponse(
+        "email_settings.html",
+        {
+            "request": request,
+            "settings": settings or {},
+        }
+    )
+
+
+async def update_email_settings(request: Request) -> RedirectResponse:
+    """Update email settings from form submission."""
+    try:
+        form_data = await request.form()
+
+        settings = {
+            "smtp_host": form_data.get("smtp_host", ""),
+            "smtp_port": int(form_data.get("smtp_port", 587)),
+            "smtp_user": form_data.get("smtp_user", ""),
+            "smtp_password": form_data.get("smtp_password", ""),
+            "from_email": form_data.get("from_email", ""),
+            "from_name": form_data.get("from_name", "דיור003"),
+            "smtp_secure": form_data.get("smtp_secure") == "on",
+        }
+
+        with get_conn() as conn:
+            # If password is empty, keep the existing one
+            if not settings["smtp_password"]:
+                existing = get_email_settings(conn)
+                if existing:
+                    settings["smtp_password"] = existing.get("smtp_password", "")
+
+            success = save_email_settings(conn, settings)
+
+        if success:
+            return RedirectResponse(
+                url="/admin/email-settings?saved=1",
+                status_code=303
+            )
+        else:
+            return RedirectResponse(
+                url="/admin/email-settings?error=1",
+                status_code=303
+            )
+
+    except Exception as e:
+        logger.error(f"Error updating email settings: {e}", exc_info=True)
+        return RedirectResponse(
+            url="/admin/email-settings?error=1",
+            status_code=303
+        )
+
+
+async def test_email_settings(request: Request) -> JSONResponse:
+    """Test email connection with current settings."""
+    try:
+        form_data = await request.json()
+
+        settings = {
+            "smtp_host": form_data.get("smtp_host", ""),
+            "smtp_port": int(form_data.get("smtp_port", 587)),
+            "smtp_user": form_data.get("smtp_user", ""),
+            "smtp_password": form_data.get("smtp_password", ""),
+            "smtp_secure": form_data.get("smtp_secure", False),
+        }
+
+        # If password is empty, try to get from DB
+        if not settings["smtp_password"]:
+            with get_conn() as conn:
+                existing = get_email_settings(conn)
+                if existing:
+                    settings["smtp_password"] = existing.get("smtp_password", "")
+
+        result = test_email_connection(settings)
+        return JSONResponse(result)
+
+    except Exception as e:
+        logger.error(f"Error testing email: {e}", exc_info=True)
+        return JSONResponse({"success": False, "error": str(e)})
+
+
+def send_guide_email_route(request: Request, person_id: int, year: int, month: int) -> JSONResponse:
+    """Send guide report email to a specific person."""
+    try:
+        with get_conn() as conn:
+            result = send_guide_email(conn, person_id, year, month)
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error(f"Error in send_guide_email_route: {e}", exc_info=True)
+        return JSONResponse({"success": False, "error": str(e)})
+
+
+def send_all_guides_email_route(request: Request, year: int, month: int) -> JSONResponse:
+    """Send guide report emails to all active guides."""
+    try:
+        with get_conn() as conn:
+            result = send_all_guides_email(conn, year, month)
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error(f"Error in send_all_guides_email_route: {e}", exc_info=True)
+        return JSONResponse({"success": False, "error": str(e)})
+
+
+async def send_test_email_route(request: Request) -> JSONResponse:
+    """Send a test email to verify email settings."""
+    try:
+        form_data = await request.json()
+        to_email = form_data.get("to_email", "")
+
+        if not to_email:
+            return JSONResponse({"success": False, "error": "יש להזין כתובת מייל"})
+
+        with get_conn() as conn:
+            result = send_test_email(conn, to_email)
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error(f"Error in send_test_email_route: {e}", exc_info=True)
+        return JSONResponse({"success": False, "error": str(e)})

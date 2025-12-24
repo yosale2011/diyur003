@@ -27,6 +27,11 @@
     {% endif %}
   </form>
 
+  <div style="display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap;">
+    <a href="/summary?year={{ selected_year }}&month={{ selected_month }}" style="text-decoration: none; padding: 8px 16px; background: #28a745; color: white; border-radius: 6px; font-weight: 500;">סיכום שכר כללי</a>
+    <button id="sendAllEmailBtn" onclick="sendAllEmails()" style="padding: 8px 16px; background: #6f42c1; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">📧 שלח דוחות לכולם</button>
+  </div>
+
   <table id="guidesTable">
     <thead>
       <tr>
@@ -285,6 +290,48 @@
       });
     });
   });
+
+  async function sendAllEmails() {
+    const btn = document.getElementById('sendAllEmailBtn');
+    const originalText = btn.innerText;
+    const year = {{ selected_year or 'null' }};
+    const month = {{ selected_month or 'null' }};
+
+    if (!year || !month) {
+      alert('יש לבחור חודש ושנה');
+      return;
+    }
+
+    if (!confirm('לשלוח את הדוחות במייל לכל המדריכים הפעילים?\n\nפעולה זו עשויה לקחת מספר דקות.')) {
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = 'שולח...';
+
+    try {
+      const response = await fetch(`/api/send-all-guides-email?year=${year}&month=${month}`, {
+        method: 'POST'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        let message = result.message;
+        if (result.details && result.details.failed && result.details.failed.length > 0) {
+          message += '\n\nנכשלו:\n' + result.details.failed.map(f => `- ${f.name}: ${f.error}`).join('\n');
+        }
+        alert(message);
+      } else {
+        alert('שגיאה: ' + (result.error || 'שגיאה לא ידועה'));
+      }
+    } catch (error) {
+      alert('שגיאת רשת: ' + error.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerText = originalText;
+    }
+  }
 </script>
 {% endblock %}
 

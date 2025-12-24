@@ -1,0 +1,386 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .settings-card {
+        max-width: 600px;
+        margin: 0 auto;
+        animation: fadeIn 0.4s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .form-group {
+        margin-bottom: 18px;
+    }
+
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: #4a5568;
+        font-size: 14px;
+    }
+
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group input[type="email"],
+    .form-group input[type="password"] {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        transition: all 0.2s;
+        box-sizing: border-box;
+    }
+
+    .form-group input:focus {
+        border-color: #3182ce;
+        box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+        outline: none;
+    }
+
+    .form-group .hint {
+        font-size: 12px;
+        color: #718096;
+        margin-top: 4px;
+    }
+
+    .form-row {
+        display: flex;
+        gap: 15px;
+    }
+
+    .form-row .form-group {
+        flex: 1;
+    }
+
+    .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+    }
+
+    .btn {
+        padding: 10px 24px;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: none;
+        font-size: 14px;
+    }
+
+    .btn-primary {
+        background: #2b6cb0;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: #2c5282;
+    }
+
+    .btn-secondary {
+        background: #e2e8f0;
+        color: #4a5568;
+    }
+
+    .btn-secondary:hover {
+        background: #cbd5e0;
+    }
+
+    .btn-test {
+        background: #38a169;
+        color: white;
+    }
+
+    .btn-test:hover {
+        background: #2f855a;
+    }
+
+    .buttons-row {
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+        margin-top: 25px;
+    }
+
+    .back-link {
+        color: #4a5568;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 14px;
+        transition: color 0.2s;
+    }
+
+    .back-link:hover {
+        color: #2d3748;
+    }
+
+    .alert {
+        padding: 12px 16px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        font-size: 14px;
+    }
+
+    .alert-success {
+        background: #c6f6d5;
+        color: #276749;
+        border: 1px solid #9ae6b4;
+    }
+
+    .alert-error {
+        background: #fed7d7;
+        color: #c53030;
+        border: 1px solid #feb2b2;
+    }
+
+    .test-result {
+        padding: 12px 16px;
+        border-radius: 6px;
+        margin-top: 15px;
+        font-size: 14px;
+        display: none;
+    }
+
+    .test-result.success {
+        background: #c6f6d5;
+        color: #276749;
+        border: 1px solid #9ae6b4;
+    }
+
+    .test-result.error {
+        background: #fed7d7;
+        color: #c53030;
+        border: 1px solid #feb2b2;
+    }
+
+    .spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #ffffff;
+        border-radius: 50%;
+        border-top-color: transparent;
+        animation: spin 0.8s linear infinite;
+        margin-left: 8px;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+
+<div class="card settings-card">
+    <div class="header-line">
+        <div>
+            <h2 class="section-title" style="font-size: 22px; margin: 0; color: #1a202c;">הגדרות מייל</h2>
+            <p style="color: #718096; margin: 4px 0 0; font-size: 14px;">
+                הגדרת שרת SMTP לשליחת דוחות במייל
+            </p>
+        </div>
+        <div class="controls">
+            <a href="/summary" class="back-link">
+                <span>← חזרה לסיכום</span>
+            </a>
+        </div>
+    </div>
+
+    {% if request.query_params.get('saved') %}
+    <div class="alert alert-success">
+        ההגדרות נשמרו בהצלחה!
+    </div>
+    {% endif %}
+
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-error">
+        שגיאה בשמירת ההגדרות
+    </div>
+    {% endif %}
+
+    <form method="post" action="/admin/email-settings/update" id="emailSettingsForm">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="smtp_host">שרת SMTP</label>
+                <input type="text" id="smtp_host" name="smtp_host"
+                       value="{{ settings.smtp_host or '' }}"
+                       placeholder="smtp.gmail.com">
+            </div>
+            <div class="form-group" style="max-width: 120px;">
+                <label for="smtp_port">פורט</label>
+                <input type="number" id="smtp_port" name="smtp_port"
+                       value="{{ settings.smtp_port or 587 }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="smtp_user">שם משתמש</label>
+            <input type="text" id="smtp_user" name="smtp_user"
+                   value="{{ settings.smtp_user or '' }}"
+                   placeholder="your-email@gmail.com">
+        </div>
+
+        <div class="form-group">
+            <label for="smtp_password">סיסמה</label>
+            <input type="password" id="smtp_password" name="smtp_password"
+                   placeholder="{% if settings.smtp_password %}••••••••{% else %}הזן סיסמה{% endif %}">
+            <div class="hint">השאר ריק כדי לשמור את הסיסמה הקיימת</div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="from_email">כתובת שולח</label>
+                <input type="email" id="from_email" name="from_email"
+                       value="{{ settings.from_email or '' }}"
+                       placeholder="reports@example.com">
+            </div>
+            <div class="form-group">
+                <label for="from_name">שם שולח</label>
+                <input type="text" id="from_name" name="from_name"
+                       value="{{ settings.from_name or 'דיור003' }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <div class="checkbox-group">
+                <input type="checkbox" id="smtp_secure" name="smtp_secure"
+                       {% if settings.smtp_secure %}checked{% endif %}>
+                <label for="smtp_secure" style="margin: 0; cursor: pointer;">SSL מלא (פורט 465 בלבד)</label>
+            </div>
+            <div class="hint">לא לסמן עבור Gmail/פורט 587 - משתמש ב-STARTTLS אוטומטית</div>
+        </div>
+
+        <div id="testResult" class="test-result"></div>
+
+        <div class="buttons-row">
+            <button type="button" class="btn btn-test" onclick="testConnection()">
+                <span id="testBtnText">בדוק חיבור</span>
+            </button>
+            <button type="submit" class="btn btn-primary">
+                שמור הגדרות
+            </button>
+        </div>
+    </form>
+
+    <hr style="margin: 25px 0; border: none; border-top: 1px solid #e2e8f0;">
+
+    <h3 style="font-size: 16px; color: #4a5568; margin-bottom: 15px;">שליחת מייל בדיקה</h3>
+    <div class="form-group">
+        <label for="test_email">כתובת מייל לבדיקה</label>
+        <div style="display: flex; gap: 10px;">
+            <input type="email" id="test_email" placeholder="your@email.com" style="flex: 1;">
+            <button type="button" class="btn btn-secondary" onclick="sendTestEmail()" id="sendTestBtn">
+                <span id="sendTestBtnText">📧 שלח מייל בדיקה</span>
+            </button>
+        </div>
+    </div>
+    <div id="sendTestResult" class="test-result"></div>
+</div>
+
+<script>
+async function testConnection() {
+    const btn = document.querySelector('.btn-test');
+    const btnText = document.getElementById('testBtnText');
+    const resultDiv = document.getElementById('testResult');
+
+    // Disable button and show spinner
+    btn.disabled = true;
+    btnText.innerHTML = 'בודק... <span class="spinner"></span>';
+    resultDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/admin/email-settings/test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                smtp_host: document.getElementById('smtp_host').value,
+                smtp_port: parseInt(document.getElementById('smtp_port').value),
+                smtp_user: document.getElementById('smtp_user').value,
+                smtp_password: document.getElementById('smtp_password').value,
+                smtp_secure: document.getElementById('smtp_secure').checked
+            })
+        });
+
+        const result = await response.json();
+
+        resultDiv.style.display = 'block';
+        if (result.success) {
+            resultDiv.className = 'test-result success';
+            resultDiv.textContent = result.message || 'החיבור הצליח!';
+        } else {
+            resultDiv.className = 'test-result error';
+            resultDiv.textContent = result.error || 'שגיאה בחיבור';
+        }
+    } catch (error) {
+        resultDiv.style.display = 'block';
+        resultDiv.className = 'test-result error';
+        resultDiv.textContent = 'שגיאת רשת: ' + error.message;
+    } finally {
+        btn.disabled = false;
+        btnText.textContent = 'בדוק חיבור';
+    }
+}
+
+async function sendTestEmail() {
+    const btn = document.getElementById('sendTestBtn');
+    const btnText = document.getElementById('sendTestBtnText');
+    const resultDiv = document.getElementById('sendTestResult');
+    const testEmail = document.getElementById('test_email').value;
+
+    if (!testEmail) {
+        resultDiv.style.display = 'block';
+        resultDiv.className = 'test-result error';
+        resultDiv.textContent = 'יש להזין כתובת מייל';
+        return;
+    }
+
+    btn.disabled = true;
+    btnText.innerHTML = 'שולח... <span class="spinner"></span>';
+    resultDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/admin/email-settings/send-test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                to_email: testEmail
+            })
+        });
+
+        const result = await response.json();
+
+        resultDiv.style.display = 'block';
+        if (result.success) {
+            resultDiv.className = 'test-result success';
+            resultDiv.textContent = result.message || 'מייל בדיקה נשלח בהצלחה!';
+        } else {
+            resultDiv.className = 'test-result error';
+            resultDiv.textContent = result.error || 'שגיאה בשליחה';
+        }
+    } catch (error) {
+        resultDiv.style.display = 'block';
+        resultDiv.className = 'test-result error';
+        resultDiv.textContent = 'שגיאת רשת: ' + error.message;
+    } finally {
+        btn.disabled = false;
+        btnText.textContent = '📧 שלח מייל בדיקה';
+    }
+}
+</script>
+{% endblock %}
