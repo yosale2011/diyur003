@@ -127,8 +127,21 @@ async def send_guide_email_route(request: Request, person_id: int, year: int, mo
         except:
             pass
 
-        with get_conn() as conn:
-            result = send_guide_email(conn, person_id, year, month, custom_email)
+        import asyncio
+        
+        # Wrapper function to run in separate thread with its own DB connection
+        def send_email_task_wrapper(pid, y, m, email):
+            try:
+                # Create a fresh connection for this thread to avoid any sharing issues
+                with get_conn() as new_conn:
+                    return send_guide_email(new_conn, pid, y, m, email)
+            except Exception as task_error:
+                logger.error(f"Error in threaded email task: {task_error}")
+                return {"success": False, "error": str(task_error)}
+
+        # Run blocking PDF generation in a thread to prevent event loop deadlock
+        result = await asyncio.to_thread(send_email_task_wrapper, person_id, year, month, custom_email)
+            
         return JSONResponse(result)
     except Exception as e:
         logger.error(f"Error in send_guide_email_route: {e}", exc_info=True)

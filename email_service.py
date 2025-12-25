@@ -10,6 +10,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from typing import Optional, Dict, List, Any
+import os
+import re
 from io import BytesIO
 
 from xhtml2pdf import pisa
@@ -18,6 +20,45 @@ from config import config
 from database import get_conn
 
 logger = logging.getLogger(__name__)
+
+
+def link_callback(uri, rel):
+    """
+    Convert HTML URIs to absolute system paths so xhtml2pdf can access those
+    resources.
+    """
+    # Debug print to help identify what uri is being requested
+    # print(f"DEBUG: link_callback requested for uri: {uri}")
+
+    # Handle explicit font request
+    if 'arial.ttf' in uri:
+        return os.path.join(os.getcwd(), 'arial.ttf')
+
+    # handle absolute paths
+    if os.path.isabs(uri):
+        return uri
+    
+    # handle file:// URIs
+    if uri.startswith('file://'):
+        path = uri.replace('file://', '', 1)
+        # On Windows, file:///C:/path becomes /C:/path
+        if path.startswith('/') and len(path) > 2 and path[2] == ':':
+            path = path[1:]
+        return path
+
+    # handle static files
+    static_url = "/static/"
+    if uri.startswith(static_url):
+        local_path = os.path.join(os.getcwd(), 'static', uri.replace(static_url, ""))
+        if os.path.exists(local_path):
+            return local_path
+
+    # Check current directory for any other files
+    local_path = os.path.join(os.getcwd(), uri)
+    if os.path.exists(local_path):
+        return local_path
+        
+    return uri
 
 
 def get_email_settings(conn) -> Optional[Dict[str, Any]]:
@@ -189,100 +230,120 @@ def send_test_email(conn, to_email: str) -> Dict[str, Any]:
 
 
 def generate_guide_pdf(conn, person_id: int, year: int, month: int) -> Optional[bytes]:
-    """Generate PDF for guide report."""
+    """Generate PDF for guide report using Headless Edge over local file."""
+    import subprocess
+    import tempfile
+    import os
     import re
+    from fastapi.testclient import TestClient
+    from config import config
+    
+    # Import app inside function to avoid circular dependency
+    try:
+        from app import app
+    except ImportError:
+        logger.error("Could not import app for PDF generation")
+        return None
 
     try:
-        from starlette.testclient import TestClient
-        from app import app
-
-        # Use TestClient to render the guide page
+        # 1. Render HTML using TestClient (internal execution, no network deadlock)
         client = TestClient(app)
         response = client.get(f"/guide/{person_id}?year={year}&month={month}")
-
+        
         if response.status_code != 200:
-            logger.error(f"Failed to get guide page: {response.status_code}")
+            logger.error(f"Failed to render guide page: {response.status_code}")
             return None
-
+            
         html_content = response.text
+        
+        # 2. Fix static assets for file:// access
+        # Convert /static/path to file:///absolute/path/static/path
+        if config.STATIC_DIR:
+            static_base_uri = config.STATIC_DIR.as_uri()
+            # Ensure it ends with / if needed, though as_uri usually doesn't for dirs?
+            # actually as_uri on Windows path might be file:///C:/.../static
+            # We want to replace all "/static/" references.
+            
+            # Simple replace: href="/static/css..." -> href="file:///.../static/css..."
+            # We strip the leading slash from the uri if present in replacement
+            # static_base_uri usually looks like 'file:///F:/.../static'
+            
+            html_content = html_content.replace('"/static/', f'"{static_base_uri}/')
+            html_content = html_content.replace("'/static/", f"'{static_base_uri}/")
 
-        # Remove ALL style tags - xhtml2pdf has issues with modern CSS
-        html_content = re.sub(r'<style[^>]*>.*?</style>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
-
-        # Remove script tags
-        html_content = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
-
-        # Remove header element
-        html_content = re.sub(r'<header[^>]*>.*?</header>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
-
-        # Simple PDF-compatible CSS for xhtml2pdf
-        pdf_css = """
-        <style>
-            @page {
-                size: A4;
-                margin: 1cm;
-            }
-            body {
-                direction: rtl;
-                font-family: Arial, sans-serif;
-                font-size: 10pt;
-            }
-            .controls, nav, button, form, .tabs, .no-print {
-                display: none;
-            }
-            .card {
-                border: 1px solid #ddd;
-                padding: 10px;
-                margin-bottom: 10px;
-            }
-            table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 10px;
-            }
-            th, td {
-                border: 1px solid #ccc;
-                padding: 4px;
-                text-align: right;
-            }
-            th {
-                background: #f2f4f7;
-                font-weight: bold;
-            }
-            .panel {
-                display: block;
-            }
-            .pill {
-                background: #e8f0ff;
-                padding: 2px 6px;
-                border-radius: 4px;
-            }
-            h2, h3 {
-                margin: 10px 0;
-            }
-        </style>
-        """
-
-        # Insert CSS after <head> tag
-        if "<head>" in html_content:
-            html_content = html_content.replace("<head>", f"<head>{pdf_css}")
-        else:
-            html_content = pdf_css + html_content
-
-        # Generate PDF using xhtml2pdf
-        pdf_buffer = BytesIO()
-        pisa_status = pisa.CreatePDF(
-            html_content,
-            dest=pdf_buffer,
-            encoding='utf-8'
-        )
-
-        if pisa_status.err:
-            logger.error(f"Error creating PDF: {pisa_status.err}")
+        # 3. Save to temp HTML file
+        fd, temp_html_path = tempfile.mkstemp(suffix='.html')
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+            
+        # 4. Prepare temp PDF path
+        fd_pdf, temp_pdf_path = tempfile.mkstemp(suffix='.pdf')
+        os.close(fd_pdf) # Just reserve the name
+        
+        # 5. Find Browser (Edge or Chrome)
+        # We try standard paths for both
+        browser_paths = [
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+        ]
+        
+        browser_exe = None
+        for path in browser_paths:
+            if os.path.exists(path):
+                browser_exe = path
+                break
+        
+        if not browser_exe:
+            logger.error("No suitable browser (Edge/Chrome) found for PDF generation")
             return None
 
-        pdf_buffer.seek(0)
-        return pdf_buffer.read()
+        # 6. Run Edge against the FILE
+        # Windows file path to URI
+        file_url = f"file:///{temp_html_path.replace(os.sep, '/')}"
+        
+        cmd = [
+            browser_exe,
+            "--headless",
+            "--disable-gpu",
+            "--no-pdf-header-footer",
+            f"--print-to-pdf={temp_pdf_path}",
+            file_url
+        ]
+        
+        logger.info(f"Generating PDF using Edge from local file: {file_url}")
+        
+        result = subprocess.run(cmd, capture_output=True, timeout=15)
+        
+        # Cleanup HTML file
+        try:
+            os.unlink(temp_html_path)
+        except:
+            pass
+
+        if result.returncode != 0:
+            logger.error(f"Edge PDF generation error: {result.stderr.decode('utf-8', errors='ignore')}")
+            # Continue to check if file exists anyway
+
+        if os.path.exists(temp_pdf_path) and os.path.getsize(temp_pdf_path) > 0:
+            with open(temp_pdf_path, "rb") as f:
+                pdf_bytes = f.read()
+            try:
+                os.unlink(temp_pdf_path)
+            except:
+                pass
+            logger.info(f"PDF generated successfully, size: {len(pdf_bytes)} bytes")
+            return pdf_bytes
+        else:
+            logger.error("PDF file was not created or is empty")
+            if os.path.exists(temp_pdf_path):
+                os.unlink(temp_pdf_path)
+            return None
+
+    except Exception as e:
+        logger.error(f"Error generating PDF: {e}", exc_info=True)
+        return None
 
     except Exception as e:
         logger.error(f"Error generating PDF: {e}", exc_info=True)
@@ -383,13 +444,14 @@ def send_guide_email(conn, person_id: int, year: int, month: int, custom_email: 
             return {"success": False, "error": "שגיאה ביצירת PDF"}
 
         # Prepare email content
-        subject = f"דוח שכר {month:02d}/{year} - דיור003"
+        subject = f"דוח פירוט שעות עבודה כנספח לתלוש השכר חודש {month:02d}/{year}"
         body = f"""שלום {person['name']},
 
-מצורף דוח השכר שלך לחודש {month:02d}/{year}.
+מצורף דוח פירוט שעות העבודה והתשלום לחודש {month:02d}/{year}.
 
 בברכה,
-דיור003
+מדור שכר
+צהר הלב
 """
         pdf_filename = f"דוח_שכר_{person['name']}_{month:02d}_{year}.pdf"
 
