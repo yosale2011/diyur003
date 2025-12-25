@@ -19,7 +19,7 @@ class Config:
     """Central configuration class for the application."""
 
     # Application version
-    VERSION: str = "2.07"
+    VERSION: str = "2.08"
 
     # Database configuration
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")

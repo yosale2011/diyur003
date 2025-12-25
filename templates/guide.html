@@ -575,7 +575,7 @@
             <img src="/static/logo_tzohar.jpg" style="height: 30px; width: auto;" alt="Logo" />
 
             <!-- Center: Title -->
-            <h1 style="margin: 0; font-size: 16pt; text-align: center; flex-grow: 1;">דוח פירוט רצפים - {{ person['name'] }}</h1>
+            <h1 style="margin: 0; font-size: 16pt; text-align: center; flex-grow: 1;">דוח פירוט רצפים - {{ person['name'] }} - {{ "%02d"|format(selected_month) }}/{{ selected_year }}</h1>
 
             <!-- Left side: Meirav code or spacer -->
             {% if person['meirav_code'] %}
@@ -587,14 +587,13 @@
             {% endif %}
           </div>
 
-          <!-- Second row: Month and page number -->
-          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10pt; margin-bottom: 8px;">
-            <div>חודש: {{ "%02d"|format(selected_month) }}/{{ selected_year }}</div>
-            <div style="font-size: 7pt; color: #888;" class="page-number"></div>
+          <!-- Second row: Page number only -->
+          <div style="display: flex; justify-content: flex-end; align-items: center; font-size: 7pt; color: #888; margin-bottom: 8px;">
+            <div class="page-number"></div>
           </div>
         </div>
         <div class="no-print" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-          <h2 style="margin: 0; font-size: 20px;">דוח פירוט רצפים</h2>
+          <h2 style="margin: 0; font-size: 20px;">דוח פירוט רצפים - {{ "%02d"|format(selected_month) }}/{{ selected_year }}</h2>
           <div style="display: flex; gap: 8px;">
             <button type="button" id="toggleStandbyBtn" onclick="toggleStandby()"
               style="background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">הסתר
