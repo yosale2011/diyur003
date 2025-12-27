@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <h2 class="section-title">סנכרון מסד נתונים דמו</h2>
+    <p class="muted">העתקת נתונים ממסד הייצור למסד הדמו</p>
+
+    <div style="margin: 20px 0; padding: 16px; background: #f8f9fa; border-radius: 8px;">
+        <h3 style="margin: 0 0 12px;">סטטוס מסד דמו</h3>
+        {% if demo_status.connected %}
+            <div style="color: #28a745; margin-bottom: 8px;">
+                <strong>מחובר</strong>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; max-width: 400px;">
+                <div>
+                    <div class="muted">טבלאות</div>
+                    <div style="font-size: 24px; font-weight: bold;" id="table-count">{{ demo_status.tables }}</div>
+                </div>
+                <div>
+                    <div class="muted">סה"כ שורות</div>
+                    <div style="font-size: 24px; font-weight: bold;" id="row-count">{{ demo_status.total_rows }}</div>
+                </div>
+            </div>
+            {% if demo_status.tables == 0 %}
+                <div style="margin-top: 12px; color: #856404; background: #fff3cd; padding: 8px 12px; border-radius: 4px;">
+                    מסד הדמו ריק. לחץ על "סנכרון עכשיו" להעתקת הנתונים.
+                </div>
+            {% endif %}
+        {% else %}
+            <div style="color: #dc3545;">
+                <strong>לא מחובר</strong>
+                <div class="muted" style="margin-top: 4px;">{{ demo_status.error }}</div>
+            </div>
+        {% endif %}
+    </div>
+
+    <div style="margin: 24px 0;">
+        <button id="sync-btn" onclick="runSync()" style="padding: 12px 24px; font-size: 16px;">
+            סנכרון עכשיו
+        </button>
+        <button onclick="refreshStatus()" style="background: #6c757d; padding: 12px 24px; font-size: 16px; margin-right: 8px;">
+            רענן סטטוס
+        </button>
+    </div>
+
+    <div id="sync-progress" style="display: none; margin: 20px 0; padding: 16px; background: #e3f2fd; border-radius: 8px;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <div class="spinner" style="width: 24px; height: 24px; border: 3px solid #1f6feb; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <span id="sync-message">מסנכרן...</span>
+        </div>
+        <div style="background: #ddd; border-radius: 4px; height: 8px; overflow: hidden;">
+            <div id="progress-bar" style="background: #1f6feb; height: 100%; width: 0%; transition: width 0.3s;"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: #666;">
+            <span id="progress-step">0 / 0</span>
+            <span id="progress-percent">0%</span>
+        </div>
+    </div>
+
+    <div id="sync-result" style="display: none; margin: 20px 0; padding: 16px; border-radius: 8px;"></div>
+
+    <div id="sync-details" style="display: none; margin: 20px 0;">
+        <h3>פירוט טבלאות</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>טבלה</th>
+                    <th>שורות</th>
+                    <th>סטטוס</th>
+                </tr>
+            </thead>
+            <tbody id="details-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+
+<script>
+function runSync() {
+    const btn = document.getElementById('sync-btn');
+    const progress = document.getElementById('sync-progress');
+    const result = document.getElementById('sync-result');
+    const details = document.getElementById('sync-details');
+    const progressBar = document.getElementById('progress-bar');
+    const progressStep = document.getElementById('progress-step');
+    const progressPercent = document.getElementById('progress-percent');
+    const syncMessage = document.getElementById('sync-message');
+
+    btn.disabled = true;
+    btn.textContent = 'מסנכרן...';
+    progress.style.display = 'block';
+    result.style.display = 'none';
+    details.style.display = 'none';
+    progressBar.style.width = '0%';
+
+    // Use Server-Sent Events for real-time progress
+    const eventSource = new EventSource('/admin/demo-sync/run');
+
+    eventSource.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'start') {
+            syncMessage.textContent = data.message;
+        }
+        else if (data.type === 'progress') {
+            const percent = data.total > 0 ? Math.round((data.current / data.total) * 100) : 0;
+            progressBar.style.width = percent + '%';
+            progressStep.textContent = data.current + ' / ' + data.total;
+            progressPercent.textContent = percent + '%';
+            syncMessage.textContent = data.message;
+        }
+        else if (data.type === 'complete') {
+            eventSource.close();
+            progress.style.display = 'none';
+            result.style.display = 'block';
+
+            if (data.success) {
+                result.style.background = '#d4edda';
+                result.style.color = '#155724';
+                result.innerHTML = '<strong>' + data.message + '</strong>';
+
+                if (data.details && data.details.details) {
+                    showDetails(data.details.details);
+                }
+                refreshStatus();
+            } else {
+                result.style.background = '#f8d7da';
+                result.style.color = '#721c24';
+                result.innerHTML = '<strong>' + data.message + '</strong>';
+
+                if (data.details && data.details.errors) {
+                    result.innerHTML += '<ul style="margin-top: 8px;">';
+                    data.details.errors.forEach(err => {
+                        result.innerHTML += '<li>' + err + '</li>';
+                    });
+                    result.innerHTML += '</ul>';
+                }
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'סנכרון עכשיו';
+        }
+        else if (data.type === 'error') {
+            eventSource.close();
+            progress.style.display = 'none';
+            result.style.display = 'block';
+            result.style.background = '#f8d7da';
+            result.style.color = '#721c24';
+            result.innerHTML = '<strong>' + data.message + '</strong>';
+
+            btn.disabled = false;
+            btn.textContent = 'סנכרון עכשיו';
+        }
+    };
+
+    eventSource.onerror = function(err) {
+        eventSource.close();
+        progress.style.display = 'none';
+        result.style.display = 'block';
+        result.style.background = '#f8d7da';
+        result.style.color = '#721c24';
+        result.innerHTML = '<strong>שגיאה בחיבור לשרת</strong>';
+
+        btn.disabled = false;
+        btn.textContent = 'סנכרון עכשיו';
+    };
+}
+
+function showDetails(tableDetails) {
+    const details = document.getElementById('sync-details');
+    const body = document.getElementById('details-body');
+
+    body.innerHTML = '';
+    tableDetails.forEach(t => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${t.table}</td>
+            <td>${t.rows}</td>
+            <td style="color: ${t.status === 'success' ? '#28a745' : '#dc3545'}">
+                ${t.status === 'success' ? 'הצלחה' : t.error || 'שגיאה'}
+            </td>
+        `;
+        body.appendChild(row);
+    });
+
+    details.style.display = 'block';
+}
+
+async function refreshStatus() {
+    try {
+        const response = await fetch('/admin/demo-sync/status');
+        const status = await response.json();
+
+        if (status.connected) {
+            document.getElementById('table-count').textContent = status.tables;
+            document.getElementById('row-count').textContent = status.total_rows;
+        }
+    } catch (err) {
+        console.error('Failed to refresh status:', err);
+    }
+}
+</script>
+{% endblock %}

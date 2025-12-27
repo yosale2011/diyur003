@@ -9,14 +9,16 @@ import time
 from datetime import datetime
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
 import psycopg2
 
 from config import config
+from database import set_demo_mode, get_demo_mode_from_cookie, is_demo_mode, get_current_db_name
 from logic import (
     calculate_person_monthly_totals,
 )
@@ -24,7 +26,7 @@ from utils import human_date
 from utils import calculate_accruals, format_currency
 from routes.home import home
 from routes.guide import simple_summary_view, guide_view
-from routes.admin import manage_payment_codes, update_payment_codes
+from routes.admin import manage_payment_codes, update_payment_codes, demo_sync_page, sync_demo_database, demo_sync_status
 from routes.summary import general_summary
 from routes.export import (
     export_gesher,
@@ -52,6 +54,19 @@ templates = Jinja2Templates(directory=str(config.TEMPLATES_DIR))
 templates.env.filters["human_date"] = human_date
 templates.env.filters["format_currency"] = format_currency
 templates.env.globals["app_version"] = config.VERSION
+
+
+# Middleware to set demo mode from cookie
+class DemoModeMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Set demo mode based on cookie
+        demo_mode = get_demo_mode_from_cookie(request)
+        set_demo_mode(demo_mode)
+        response = await call_next(request)
+        return response
+
+
+app.add_middleware(DemoModeMiddleware)
 
 # Mount static files
 if config.STATIC_DIR:
@@ -165,6 +180,24 @@ async def update_payment_codes_route(request: Request):
     return await update_payment_codes(request)
 
 
+@app.get("/admin/demo-sync", response_class=HTMLResponse)
+def demo_sync_route(request: Request):
+    """Demo database sync page."""
+    return demo_sync_page(request)
+
+
+@app.get("/admin/demo-sync/run")
+async def sync_demo_route(request: Request):
+    """Run demo database sync with SSE progress."""
+    return await sync_demo_database(request)
+
+
+@app.get("/admin/demo-sync/status")
+def demo_sync_status_route(request: Request):
+    """Get demo database status."""
+    return demo_sync_status(request)
+
+
 @app.get("/summary", response_class=HTMLResponse)
 def general_summary_route(request: Request, year: int = None, month: int = None):
     """General monthly summary."""
@@ -241,6 +274,40 @@ async def send_guide_email_api(request: Request, person_id: int, year: int, mont
 def send_all_guides_email_api(request: Request, year: int, month: int):
     """Send guide report emails to all active guides."""
     return send_all_guides_email_route(request, year, month)
+
+
+@app.post("/api/toggle-demo-mode")
+def toggle_demo_mode(request: Request):
+    """Toggle between demo and production database."""
+    current_demo = get_demo_mode_from_cookie(request)
+    new_demo = not current_demo
+
+    response = JSONResponse({
+        "success": True,
+        "demo_mode": new_demo,
+        "db_name": "דמו" if new_demo else "ייצור"
+    })
+
+    # Set cookie (expires in 24 hours)
+    response.set_cookie(
+        key="demo_mode",
+        value="true" if new_demo else "false",
+        max_age=86400,
+        httponly=False,
+        samesite="lax"
+    )
+
+    return response
+
+
+@app.get("/api/demo-mode-status")
+def demo_mode_status(request: Request):
+    """Get current demo mode status."""
+    demo = get_demo_mode_from_cookie(request)
+    return {
+        "demo_mode": demo,
+        "db_name": "דמו" if demo else "ייצור"
+    }
 
 
 if __name__ == "__main__":

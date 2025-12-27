@@ -16,13 +16,17 @@
       background: #f7f7f7;
     }
     header {
-      background: #1f6feb;
+      background: var(--header-bg, #1f6feb);
       color: #fff;
       padding: 12px 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      transition: background 0.3s;
+    }
+    header.demo-mode {
+      background: #e67e22 !important;
     }
     header a {
       color: #fff;
@@ -219,15 +223,88 @@
         <a href="/summary" style="font-weight: normal; opacity: 0.9; font-size: 0.9em; background: rgba(255,255,255,0.2); padding: 4px 8px; border-radius: 4px;">סיכום שכר כללי</a>
         <a href="/admin/payment-codes" style="font-weight: normal; opacity: 0.9; font-size: 0.9em; background: rgba(255,255,255,0.2); padding: 4px 8px; border-radius: 4px;">ניהול סמלי שכר</a>
         <a href="/admin/email-settings" style="font-weight: normal; opacity: 0.9; font-size: 0.9em; background: rgba(255,255,255,0.2); padding: 4px 8px; border-radius: 4px;">⚙️ הגדרות מייל</a>
+        <a href="/admin/demo-sync" style="font-weight: normal; opacity: 0.9; font-size: 0.9em; background: rgba(255,255,255,0.2); padding: 4px 8px; border-radius: 4px;">סנכרון דמו</a>
     </div>
-    <div style="color: #fff; text-align: left; font-size: 0.85em;">
-        <div>גרסה {{ app_version }} · מסד נתונים בענן</div>
-        <div style="font-size: 0.75em; opacity: 0.7;">{{ db_path }}</div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <button id="demo-toggle-btn" onclick="toggleDemoMode()" style="
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 2px solid #fff;
+            background: transparent;
+            color: #fff;
+            font-size: 0.85em;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        ">
+            <span id="demo-indicator" style="
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: #28a745;
+            "></span>
+            <span id="demo-label">ייצור</span>
+        </button>
+        <div style="color: #fff; text-align: left; font-size: 0.85em;">
+            <div>גרסה {{ app_version }}</div>
+            <div id="db-name-display" style="font-size: 0.75em; opacity: 0.8;"></div>
+        </div>
     </div>
   </header>
   <main>
     {% block content %}{% endblock %}
   </main>
+
+  <script>
+    // Demo mode toggle functionality
+    function updateDemoUI(isDemo) {
+        const indicator = document.getElementById('demo-indicator');
+        const label = document.getElementById('demo-label');
+        const btn = document.getElementById('demo-toggle-btn');
+        const header = document.querySelector('header');
+        const dbDisplay = document.getElementById('db-name-display');
+
+        if (isDemo) {
+            indicator.style.background = '#ffc107';
+            label.textContent = 'דמו';
+            btn.style.background = 'rgba(255, 193, 7, 0.3)';
+            btn.style.borderColor = '#ffc107';
+            header.classList.add('demo-mode');
+            dbDisplay.textContent = 'מסד: diyurdemodb (דמו)';
+        } else {
+            indicator.style.background = '#28a745';
+            label.textContent = 'ייצור';
+            btn.style.background = 'transparent';
+            btn.style.borderColor = '#fff';
+            header.classList.remove('demo-mode');
+            dbDisplay.textContent = 'מסד: defaultdb (ייצור)';
+        }
+    }
+
+    async function toggleDemoMode() {
+        try {
+            const response = await fetch('/api/toggle-demo-mode', { method: 'POST' });
+            const data = await response.json();
+
+            if (data.success) {
+                updateDemoUI(data.demo_mode);
+                // Reload the page to reflect new database
+                window.location.reload();
+            }
+        } catch (err) {
+            console.error('Failed to toggle demo mode:', err);
+            alert('שגיאה בהחלפת מצב');
+        }
+    }
+
+    // Check initial state on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const isDemo = document.cookie.split('; ').find(row => row.startsWith('demo_mode='))?.split('=')[1] === 'true';
+        updateDemoUI(isDemo);
+    });
+  </script>
 </body>
 </html>
 
